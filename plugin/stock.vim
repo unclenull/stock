@@ -3,12 +3,6 @@ let g:stk_data_file_path = $HOME . '/.stock.dat.json'
 let g:stk_runner_path = expand('<sfile>:p:h') .. '/' .. "stock_runner.py"
 let g:stk_last_read_time = 0
 
-function! ShortenMode()
-  let l:mode = airline#section#create_mode()
-  return l:mode[:2]  " Return the first three characters of the mode
-endfunction
-"let g:airline_section_a = '%{airline#util#shorten_mode()}'
-
 function! Log(msg)
   echom "[STOCK] " . a:msg
 endfunction
@@ -21,16 +15,20 @@ endfunction
 
 function! AirlineThemePatch(palette)
   let a:palette.accents.up = [ '#5d6b00', '', 0, '', '' ]
+  let a:palette.accents.up_hl = [ '#cb4b16', '', 0, '', 'bold' ]
   let a:palette.accents.down = [ '#1d7069', '', 0, '', '' ]
-  let a:palette.accents.same = [ '#586e6b', '', 0, '', '' ]
+  let a:palette.accents.down_hl = [ '#268bdc', '', 0, '', 'bold' ]
+  let a:palette.accents.even = [ '#586e6b', '', 0, '', '' ]
 endfunction
 let g:airline_theme_patch_func = 'AirlineThemePatch'
 call airline#highlighter#add_accent('up')
+call airline#highlighter#add_accent('up_hl')
 call airline#highlighter#add_accent('down')
-call airline#highlighter#add_accent('same')
+call airline#highlighter#add_accent('down_hl')
+call airline#highlighter#add_accent('even')
 
 let g:stk_sep = '/'
-call airline#parts#define_accent(g:stk_sep, 'same')
+call airline#parts#define_accent(g:stk_sep, 'even')
 
 function! IsProcessRunning(pid)
   python3 << EOF
@@ -188,9 +186,7 @@ function! DisplayPrices(timer)
       let l:ix = 0
       let l:names = []
       for [key, value] in l:data['prices']
-        let l:ix += 1
-
-        if l:ix < 4
+        if l:ix < 3
           let key = string(value)
           let valueStr = key
         else
@@ -198,18 +194,42 @@ function! DisplayPrices(timer)
         endif
 
         call add(l:names, key)
-        if l:ix < 4
+        if l:ix < 3
           call add(l:names, g:stk_sep)
         endif
         call airline#parts#define_text(key, valueStr)
 
-        if value == 0
-          call airline#parts#define_accent(key, 'same')
-        elseif value > 0
-          call airline#parts#define_accent(key, 'up')
+        let l:undefined = 0
+        if l:ix < 3
+          let l:threshold = [2, 3, 4][ix]
+          if value >= l:threshold
+            call airline#parts#define_accent(key, 'up_hl')
+          elseif value <= -l:threshold
+            call airline#parts#define_accent(key, 'down_hl')
+          else
+            let l:undefined = 1
+          endif
         else
-          call airline#parts#define_accent(key, 'down')
+          if value >= 8
+            call airline#parts#define_accent(key, 'up_hl')
+          elseif value <= -5
+            call airline#parts#define_accent(key, 'down_hl')
+          else
+            let l:undefined = 1
+          endif
         endif
+
+        if l:undefined
+          if value == 0
+            call airline#parts#define_accent(key, 'even')
+          elseif value > 0
+            call airline#parts#define_accent(key, 'up')
+          else
+            call airline#parts#define_accent(key, 'down')
+          endif
+        endif
+
+        let l:ix += 1
       endfor
       let g:airline_section_c = airline#section#create(l:names)
       call airline#update_statusline()
@@ -225,7 +245,7 @@ function! DisplayPrices(timer)
   if l:timehour < "0915"
     let l:target_hour = 9
     let l:target_minute = 20
-  elseif l:timehour < "1300"
+  elseif l:timehour > "1130" && l:timehour < "1300"
     let l:target_hour = 13
     let l:target_minute = 30
   elseif l:timehour > "1500"
@@ -236,9 +256,10 @@ function! DisplayPrices(timer)
   if l:target_hour
     let l:current_hour = str2nr(strftime("%H"))
     let l:current_minute = str2nr(strftime("%M"))
-    let l:delay = (l:target_hour - l:current_hour) * 60 + (l:target_minute - l:current_minute)
-    call timer_start(l:delay * 60000, 'StartRunner')
-    call Log('Runner scheduled after ' . l:delay . ' minutes')
+    let l:hour = l:target_hour - l:current_hour
+    let l:min = l:target_minute - l:current_minute
+    call timer_start((l:hour * 60 + l:min) * 60000, 'StartRunner')
+    call Log('scheduled after ' . l:hour . ':' . l:min)
   else
     call timer_start(5000, 'DisplayPrices')
   endif
