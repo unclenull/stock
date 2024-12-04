@@ -244,10 +244,10 @@ function! DisplayPrices(timer)
   let l:timehour = strftime("%H%M")
   if l:timehour < "0915"
     let l:target_hour = 9
-    let l:target_minute = 20
+    let l:target_minute = 15
   elseif l:timehour > "1130" && l:timehour < "1300"
     let l:target_hour = 13
-    let l:target_minute = 30
+    let l:target_minute = 0
   elseif l:timehour > "1500"
     call Log('Market closed')
     return
@@ -256,9 +256,11 @@ function! DisplayPrices(timer)
   if l:target_hour
     let l:current_hour = str2nr(strftime("%H"))
     let l:current_minute = str2nr(strftime("%M"))
-    let l:hour = l:target_hour - l:current_hour
-    let l:min = l:target_minute - l:current_minute
-    call timer_start((l:hour * 60 + l:min) * 60000, 'StartRunner')
+    let l:min = (l:target_hour - l:current_hour) * 60 + (l:target_minute - l:current_minute)
+    call timer_start(l:min * 60000, 'StartRunner')
+
+    let l:hour = l:min / 60
+    let l:min = l:min % 60
     call Log('scheduled after ' . l:hour . ':' . l:min)
   else
     call timer_start(5000, 'DisplayPrices')
