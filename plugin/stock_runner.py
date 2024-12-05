@@ -85,7 +85,7 @@ observer.start()
 time_start1 = datetime.strptime("9:15", "%H:%M").time()
 time_end1 = datetime.strptime("11:30", "%H:%M").time()
 time_start2 = datetime.strptime("13:00", "%H:%M").time()
-time_end2 = datetime.strptime("17:00", "%H:%M").time()
+time_end2 = datetime.strptime("15:00", "%H:%M").time()
 with open(dataFile, 'w', encoding="utf-8") as fData, open(dataLockFile, "w", encoding="utf-8") as fLock:
     jsonData = {"runner_pid": os.getpid()}
     while True:

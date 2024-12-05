@@ -254,7 +254,7 @@ function! DisplayPrices(timer)
   elseif l:timehour > "1130" && l:timehour < "1300"
     let l:target_hour = 13
     let l:target_minute = 0
-  elseif l:timehour > "1700"
+  elseif l:timehour > "1500"
     call Log('Market closed')
     return
   endif
