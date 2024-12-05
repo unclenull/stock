@@ -1,5 +1,7 @@
-let g:stk_config_file_path = $HOME . '/.stock.cfg.json'
-let g:stk_data_file_path = $HOME . '/.stock.dat.json'
+let g:stk_config_path = $HOME . '/.stock.cfg.json'
+let g:stk_data_path = $HOME . '/.stock.dat.json'
+let g:stk_data_lock_path = $HOME . '/.stock.dat.json'
+let g:stk_runner_lock_path = $HOME . '/.stock.runner.lock'
 let g:stk_runner_path = expand('<sfile>:p:h') .. '/' .. "stock_runner.py"
 let g:stk_last_read_time = 0
 
@@ -63,7 +65,7 @@ endfunction
 lua << EOF
 local file_handle
 function OpenDataFile()
-    file_handle = io.open(vim.g.stk_data_file_path, 'r')
+    file_handle = io.open(vim.g.stk_data_path, 'r')
     if file_handle then
         file_handle:setvbuf("full", 4096)  -- Set buffer size for efficiency
     else
@@ -98,8 +100,8 @@ function! ReadData()
 endfunction
 
 function! ReadConfig()
-  if filereadable(g:stk_config_file_path)
-    let l:json_content = join(readfile(g:stk_config_file_path), "\n")
+  if filereadable(g:stk_config_path)
+    let l:json_content = join(readfile(g:stk_config_path), "\n")
     let l:config = json_decode(l:json_content)
 
     if str2nr(strftime("%w")) > 5 || index(l:config['rest_dates'], strftime("%Y-%m-%d")) > -1
@@ -112,10 +114,10 @@ function! ReadConfig()
       return 0
     endif
   else
-    call Log("File does not exist: " . g:stk_config_file_path)
-    let l:data = {"codes": [], "runner_pid": 0, "rest_dates": []}
+    call Log("File does not exist: " . g:stk_config_path)
+    let l:data = {"codes": [], "rest_dates": []}
     let l:json_content = json_encode(l:data)
-    call writefile(split(l:json_content, "\n"), g:stk_config_file_path)
+    call writefile(split(l:json_content, "\n"), g:stk_config_path)
     return 0
   endif
 
@@ -131,12 +133,11 @@ function! StartRunner(check)
       throw ''
     endif
 
-    let l:lockfile = $HOME . '/stock.runner.lock'
-    if filereadable(l:lockfile)
+    if filereadable(g:stk_runner_lock_path)
       call Log("Runner is starting by another instance")
       throw ''
     endif
-    call writefile([], l:lockfile)
+    call writefile([], g:stk_runner_lock_path)
     let l:jobid = jobstart(["python", g:stk_runner_path])
     if l:jobid == -1
       call LogErr("runner not executable")
@@ -146,10 +147,7 @@ function! StartRunner(check)
       throw ''
     endif
 
-    let l:data['runner_pid'] = jobpid(l:jobid)
-    let l:json_content = json_encode(l:data)
-    call writefile(split(l:json_content, "\n"), g:stk_data_file_path)
-    call delete(l:lockfile)
+    call delete(g:stk_runner_lock_path)
     call Log("Runner started")
   catch
     if v:exception != ''
@@ -162,7 +160,7 @@ endfunction
 
 function! WaitPrices(runner_time)
   "echom 'WaitPrices'"
-  if getftime(g:stk_data_file_path) > a:runner_time
+  if getftime(g:stk_data_path) > a:runner_time
     call DisplayPrices(0)
   else
     call timer_start(1000, 'WaitPrices')
@@ -171,7 +169,15 @@ endfunction
 
 function! DisplayPrices(timer)
   "echom 'DisplayPrices'"
-  let l:updated = getftime(g:stk_data_file_path) > g:stk_last_read_time
+  let l:tData = getftime(g:stk_data_path)
+  let l:tLock = getftime(g:stk_data_lock_path)
+  if l:tLock > l:tData
+    call Log('Data is locked')
+    call timer_start(500, 'DisplayPrices')
+    return
+  endif
+
+  let l:updated = l:tData > g:stk_last_read_time
   let l:data = ReadData()
   if !l:updated && !IsProcessRunning(l:data['runner_pid'])
     call StartRunner(0)
@@ -248,7 +254,7 @@ function! DisplayPrices(timer)
   elseif l:timehour > "1130" && l:timehour < "1300"
     let l:target_hour = 13
     let l:target_minute = 0
-  elseif l:timehour > "1500"
+  elseif l:timehour > "1700"
     call Log('Market closed')
     return
   endif
