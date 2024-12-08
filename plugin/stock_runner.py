@@ -110,7 +110,7 @@ def checkNotify(data):
         elif down:
             img = 'down'
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        img = os.path.join(script_dir, img + '.svg')
+        img = os.path.join(script_dir, img + '.png')
         toast(txts, img)
 
 def toast(txts, img = None):
@@ -156,8 +156,12 @@ time_start1 = datetime.strptime("9:15", "%H:%M").time()
 time_end1 = datetime.strptime("11:30", "%H:%M").time()
 time_start2 = datetime.strptime("13:00", "%H:%M").time()
 time_end2 = datetime.strptime("15:00", "%H:%M").time()
-with open(dataFile, 'r+', encoding="utf-8") as fData, open(dataLockFile, "w", encoding="utf-8") as fLock:
-    data = json.load(fData)
+with open(dataFile, 'a+', encoding="utf-8") as fData, open(dataLockFile, "w", encoding="utf-8") as fLock:
+    dataStr = fData.read()
+    if dataStr:
+        data = json.loads(datStr)
+    else:
+        data = {}
     data_modified_time = os.path.getmtime(dataFile)
     data_modified_date = datetime.fromtimestamp(data_modified_time).date()
     if data_modified_date == datetime.now().date() and "notified" in data:
