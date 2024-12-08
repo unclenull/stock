@@ -3,6 +3,7 @@ let g:stk_data_path = $HOME . '/.stock.dat.json'
 let g:stk_data_lock_path = $HOME . '/.stock.dat.json'
 let g:stk_runner_lock_path = $HOME . '/.stock.runner.lock'
 let g:stk_runner_path = expand('<sfile>:p:h') .. '/' .. "stock_runner.py"
+let g:stk_config = {}
 let g:stk_last_read_time = 0
 
 function! Log(msg)
@@ -102,26 +103,29 @@ endfunction
 function! ReadConfig()
   if filereadable(g:stk_config_path)
     let l:json_content = join(readfile(g:stk_config_path), "\n")
-    let l:config = json_decode(l:json_content)
-
-    if str2nr(strftime("%w")) > 5 || index(l:config['rest_dates'], strftime("%Y-%m-%d")) > -1
-      call Log('Today is a rest day')
-      return 0
-    endif
-
-    if empty(l:config['codes'])
+    let g:stk_config = json_decode(l:json_content)
+    if empty(g:stk_config['codes'])
       call Log('No stock code defined')
       return 0
+    else
+      return 1
     endif
   else
     call Log("File does not exist: " . g:stk_config_path)
-    let l:data = {"codes": [], "rest_dates": []}
+    let l:data = {"codes": [], "delay": 5, "threshold": {"indices": [2, 3, 4], "up": 7, "down": 5}, "rest_dates": []}
     let l:json_content = json_encode(l:data)
     call writefile(split(l:json_content, "\n"), g:stk_config_path)
     return 0
   endif
+endfunction
 
-  return 1
+function! InRest()
+  if str2nr(strftime("%w")) > 5 || index(g:stk_config['rest_dates'], strftime("%Y-%m-%d")) > -1
+    call Log('Today is a rest day')
+    return 0
+  else
+    return 1
+  endif
 endfunction
 
 function! StartRunner(check)
@@ -207,7 +211,7 @@ function! DisplayPrices(timer)
 
         let l:undefined = 0
         if l:ix < 3
-          let l:threshold = [2, 3, 4][ix]
+          let l:threshold = g:stk_config["threshold"]["indices"][ix]
           if value >= l:threshold
             call airline#parts#define_accent(key, 'up_hl')
           elseif value <= -l:threshold
@@ -216,9 +220,9 @@ function! DisplayPrices(timer)
             let l:undefined = 1
           endif
         else
-          if value >= 8
+          if value >= g:stk_config["threshold"]["up"]
             call airline#parts#define_accent(key, 'up_hl')
-          elseif value <= -5
+          elseif value <= -g:stk_config["threshold"]["down"]
             call airline#parts#define_accent(key, 'down_hl')
           else
             let l:undefined = 1
@@ -246,6 +250,9 @@ function! DisplayPrices(timer)
     call Log('No prices')
   endif
 
+  if InRest()
+    return
+
   let l:target_hour = 0
   let l:timehour = strftime("%H%M")
   if l:timehour < "0915"
@@ -269,10 +276,35 @@ function! DisplayPrices(timer)
     let l:min = l:min % 60
     call Log('scheduled after ' . l:hour . ':' . l:min)
   else
-    call timer_start(5000, 'DisplayPrices')
+    call timer_start(g:stk_config['delay'] * 1000, 'DisplayPrices')
   endif
 endfunction
 
-if ReadConfig()
-  call StartRunner(1)
-endif
+function! Main()
+  if ReadConfig()
+    let l:needRunner = 0
+
+    if InRest()
+      let l:data_modified_time = getftime(g:stk_data_path)
+      if getftime(g:stk_config_path) > l:data_modified_time
+        echom "111"
+        let l:needRunner = 1
+      else
+        let l:today_start = strptime('%Y-%m-%d', strftime('%Y-%m-%d', localtime()))
+
+        if l:data_modified_time < l:today_start
+          echom "222"
+          let l:needRunner = 1
+        endif
+      endif
+    endif
+
+    if l:needRunner
+      call StartRunner(1)
+    else
+      call DisplayPrices(0)
+    endif
+  endif
+endfunction
+
+call Main()
