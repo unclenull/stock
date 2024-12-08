@@ -82,7 +82,6 @@ def checkNotify(data):
     up = False
     down = False
     for i, (name, value) in enumerate(data):
-        # import pdb; pdb.set_trace()
         if i < 3:
             threshold = Config["threshold"]['indices'][i]
         elif value > 0:
@@ -156,16 +155,18 @@ time_start1 = datetime.strptime("9:15", "%H:%M").time()
 time_end1 = datetime.strptime("11:30", "%H:%M").time()
 time_start2 = datetime.strptime("13:00", "%H:%M").time()
 time_end2 = datetime.strptime("15:00", "%H:%M").time()
-with open(dataFile, 'a+', encoding="utf-8") as fData, open(dataLockFile, "w", encoding="utf-8") as fLock:
+
+with open(dataFile, 'r', encoding="utf-8") as fData:
     dataStr = fData.read()
     if dataStr:
-        data = json.loads(datStr)
+        Data = json.loads(dataStr)
     else:
-        data = {}
+        Data = {}
+with open(dataFile, 'w+', encoding="utf-8") as fData, open(dataLockFile, "w", encoding="utf-8") as fLock:
     data_modified_time = os.path.getmtime(dataFile)
     data_modified_date = datetime.fromtimestamp(data_modified_time).date()
-    if data_modified_date == datetime.now().date() and "notified" in data:
-        Notified = data["notified"]
+    if data_modified_date == datetime.now().date() and "notified" in Data:
+        Notified = Data["notified"]
     jsonData = {"runner_pid": os.getpid(), 'notified': Notified}
     while True:
         # import pdb; pdb.set_trace()
