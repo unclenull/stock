@@ -1,6 +1,6 @@
 let g:stk_config_path = $HOME . '/.stock.cfg.json'
 let g:stk_data_path = $HOME . '/.stock.dat.json'
-let g:stk_data_lock_path = $HOME . '/.stock.dat.json'
+let g:stk_data_lock_path = $HOME . '/.stock.dat.lock'
 let g:stk_runner_lock_path = $HOME . '/.stock.runner.lock'
 let g:stk_runner_path = expand('<sfile>:p:h') .. '/' .. "stock_runner.py"
 let g:stk_config = {}
@@ -70,12 +70,12 @@ function OpenDataFile()
     if file_handle then
         file_handle:setvbuf("full", 4096)  -- Set buffer size for efficiency
     else
-        vim.api.nvim_command('call LogErr("Failed to open file: ' .. file_path .. '")')
+        vim.api.nvim_command('call LogErr("Failed to open file: ' .. vim.g.stk_data_path .. '")')
     end
 end
 
 -- Function to read the whole content of the file
-function ReadData()
+function ReadDataInner()
     if not file_handle then
         OpenDataFile()
     end
@@ -91,7 +91,7 @@ end
 EOF
 
 function! ReadData()
-  let l:content = luaeval('ReadData()')
+  let l:content = luaeval('ReadDataInner()')
   let g:stk_last_read_time = localtime()
   if len(l:content) > 0
     return json_decode(l:content)
@@ -287,13 +287,11 @@ function! Main()
     if InRest()
       let l:data_modified_time = getftime(g:stk_data_path)
       if getftime(g:stk_config_path) > l:data_modified_time
-        echom "111"
         let l:needRunner = 1
       else
         let l:today_start = strptime('%Y-%m-%d', strftime('%Y-%m-%d', localtime()))
 
         if l:data_modified_time < l:today_start
-          echom "222"
           let l:needRunner = 1
         endif
       endif
