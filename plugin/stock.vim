@@ -122,9 +122,9 @@ endfunction
 function! InRest()
   if str2nr(strftime("%w")) > 5 || index(g:stk_config['rest_dates'], strftime("%Y-%m-%d")) > -1
     call Log('Today is a rest day')
-    return 0
-  else
     return 1
+  else
+    return 0
   endif
 endfunction
 
@@ -252,6 +252,7 @@ function! DisplayPrices(timer)
 
   if InRest()
     return
+  endif
 
   let l:target_hour = 0
   let l:timehour = strftime("%H%M")
@@ -295,6 +296,8 @@ function! Main()
           let l:needRunner = 1
         endif
       endif
+    else
+      let l:needRunner = 1
     endif
 
     if l:needRunner
