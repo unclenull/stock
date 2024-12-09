@@ -185,6 +185,6 @@ with open(dataFile, 'w+', encoding="utf-8") as fData, open(dataLockFile, "w", en
         now = datetime.now().time()
         if now >= time_start1 and now <= time_end1 \
                 or now >= time_start2 and now <= time_end2:
-            time.sleep(Config.delay)
+            time.sleep(Config['delay'])
         else:
             break
