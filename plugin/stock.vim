@@ -7,12 +7,12 @@ let g:stk_config = {}
 let g:stk_last_read_time = 0
 
 function! Log(msg)
-  echom "[STOCK] " . a:msg
+  echom "[STOCK-". strftime("%H:%M") . '] ' . a:msg
 endfunction
 
 function! LogErr(msg)
   echohl WarningMsg
-  echom "[STOCK] ERROR: " . a:msg
+  echom "[STOCK-". strftime("%H:%M") . ']ERROR: ' . a:msg
   echohl None
 endfunction
 
@@ -34,31 +34,22 @@ let g:stk_sep = '/'
 call airline#parts#define_accent(g:stk_sep, 'even')
 
 function! IsProcessRunning(pid)
+  let l:running = 0
+
   python3 << EOF
-import platform
-import os
-import ctypes
+import psutil
 import vim
 
 pid = int(vim.eval('a:pid'))
-if pid < 0:
-    vim.command('let l:running = 0')
-else:
-    if platform.system() == "Windows":
-        kernel32 = ctypes.windll.kernel32
-        process = kernel32.OpenProcess(1, 0, pid)
-        if process != 0:
-            kernel32.CloseHandle(process)
+if pid > 0:
+    try:
+        ps = psutil.Process(pid)
+        if ps.is_running() and ps.parent() and ps.parent().name() == 'nvim.exe':
             vim.command('let l:running = 1')
         else:
             vim.command('let l:running = 0')
-    else:
-        try:
-            os.kill(pid, 0)
-        except OSError:
-            vim.command('let l:running = 0')
-        else:
-            vim.command('let l:running = 1')
+    except psutil.NoSuchProcess:
+        pass
 EOF
   return l:running
 endfunction
@@ -69,8 +60,9 @@ function OpenDataFile()
     file_handle = io.open(vim.g.stk_data_path, 'r')
     if file_handle then
         file_handle:setvbuf("full", 4096)  -- Set buffer size for efficiency
+        vim.api.nvim_command('call Log("Data file opened")')
     else
-        vim.api.nvim_command('call LogErr("Failed to open file: ' .. vim.g.stk_data_path .. '")')
+        vim.api.nvim_command('call LogErr("Failed to open data file")')
     end
 end
 
@@ -84,7 +76,7 @@ function ReadDataInner()
         file_handle:seek("set")
         return file_handle:read("*all")
     else
-        vim.api.nvim_command('call Log("File handle is not available")')
+        vim.api.nvim_command('call LogErr("File handle is not available")')
         return ""
     end
 end
@@ -92,6 +84,7 @@ EOF
 
 function! ReadData()
   let l:content = luaeval('ReadDataInner()')
+  "echom 'data content: ' . l:content"
   let g:stk_last_read_time = localtime()
   if len(l:content) > 0
     return json_decode(l:content)
@@ -183,6 +176,7 @@ function! DisplayPrices(timer)
 
   let l:updated = l:tData > g:stk_last_read_time
   let l:data = ReadData()
+  "echom 'data: ' . string(l:data)"
   if !l:updated && !IsProcessRunning(l:data['runner_pid'])
     call StartRunner(0)
     return
@@ -284,8 +278,9 @@ endfunction
 function! Main()
   if ReadConfig()
     let l:needRunner = 0
+    let l:timehour = strftime("%H%M")
 
-    if InRest()
+    if InRest() || l:timehour < "0915" || l:timehour > "1130" && l:timehour < "1300" || l:timehour > "1500"
       let l:data_modified_time = getftime(g:stk_data_path)
       if getftime(g:stk_config_path) > l:data_modified_time
         let l:needRunner = 1

@@ -3,6 +3,7 @@ import sys
 import json
 import time
 import traceback
+import atexit
 from datetime import datetime
 import requests
 from watchdog.observers import Observer
@@ -12,23 +13,36 @@ from windows_toasts import Toast, WindowsToaster, ToastDisplayImage
 configFile = os.path.expanduser("~/.stock.cfg.json")
 dataFile = os.path.expanduser("~/.stock.dat.json")
 dataLockFile = os.path.expanduser("~/.stock.dat.lock")
+logFile = os.path.expanduser("~/.stock.log")
 
 Config = {}
 Stock_codes = ''
 Rests = []
 OneObserver = None
 Notified = []
+LogFileHandle = open(logFile, 'w+', encoding="utf-8")
+
+def log(msg):
+    LogFileHandle.write(f"{datetime.now().strftime('%m-%d %H:%M')}: {msg}\n")
+    LogFileHandle.flush()
 
 def global_exception_handler(exctype, value, tb):
     # import pdb; pdb.set_trace()
+    log(f"Exception: {exctype}, {value}")
     if exctype != KeyboardInterrupt:
         toast(traceback.format_exception(exctype, value, tb))
     if OneObserver:
         OneObserver.stop()
         OneObserver.join()
+
     sys.__excepthook__(exctype, value, tb)
 
 sys.excepthook = global_exception_handler
+
+def cleanup():
+    LogFileHandle.close()
+
+atexit.register(cleanup)
 
 def readConfig():
     global Config
@@ -52,15 +66,17 @@ def readConfig():
         else:
             Stock_codes += "s_bj" + code + ","
 
-    if not len(Config["codes"]):
+    if len(Config["codes"]):
         Stock_codes = Stock_codes[:-1]
 
 
 def retrieveStockData():
     codes = '' if not len(Stock_codes) else ',' + Stock_codes
+    url = f"https://hq.sinajs.cn/rn={round(datetime.now().timestamp()*1000)}&list=s_sh000001,s_sz399001,s_sz399006{codes}"
+    # log(f"Retrieve stock data for: {url}")
     try:
         rsp = requests.get(
-            f"https://hq.sinajs.cn/rn={round(datetime.now().timestamp()*1000)}&list=s_sh000001,s_sz399001,s_sz399006{codes}",
+            url,
             headers={"Referer": "https://finance.sina.com.cn"},
         )
         if rsp.status_code == 200:
@@ -71,10 +87,14 @@ def retrieveStockData():
                     continue
                 item = item[23:].split(",")
                 data.append([item[0][0:2], float(item[3])])
+            # log(f"Stock data retrieved: {json.dumps(data)}")
             return data
         else:
+            log(f"Failed to retrieve stock data, status code: {rsp.status_code}")
             return str(rsp.status_code)
     except Exception as er:
+        # import pdb; pdb.set_trace()
+        log(f"Failed to retrieve stock data: {er}")
         return str(er)
 
 def checkNotify(data):
@@ -143,6 +163,7 @@ if inRest():
     with open(dataFile, 'w', encoding="utf-8") as fData:
         jsonData = {"runner_pid": os.getpid(), 'prices': retrieveStockData()}
         fData.write(json.dumps(jsonData))
+    log("Rest day, exit.")
     sys.exit(0)
 
 event_handler = ConfigFileEventHandler()
@@ -156,13 +177,13 @@ time_end1 = datetime.strptime("11:30", "%H:%M").time()
 time_start2 = datetime.strptime("13:00", "%H:%M").time()
 time_end2 = datetime.strptime("15:00", "%H:%M").time()
 
-with open(dataFile, 'r', encoding="utf-8") as fData:
-    dataStr = fData.read()
-    if dataStr:
-        Data = json.loads(dataStr)
-    else:
-        Data = {}
-with open(dataFile, 'w+', encoding="utf-8") as fData, open(dataLockFile, "w", encoding="utf-8") as fLock:
+Data = {}
+if os.path.exists(dataFile):
+    with open(dataFile, 'r', encoding="utf-8") as fData:
+        dataStr = fData.read()
+        if dataStr:
+            Data = json.loads(dataStr)
+with open(dataFile, 'w', encoding="utf-8") as fData, open(dataLockFile, "w", encoding="utf-8") as fLock:
     data_modified_time = os.path.getmtime(dataFile)
     data_modified_date = datetime.fromtimestamp(data_modified_time).date()
     if data_modified_date == datetime.now().date() and "notified" in Data:
@@ -187,4 +208,5 @@ with open(dataFile, 'w+', encoding="utf-8") as fData, open(dataLockFile, "w", en
                 or now >= time_start2 and now <= time_end2:
             time.sleep(Config['delay'])
         else:
+            log("Market inactive, exit.")
             break
