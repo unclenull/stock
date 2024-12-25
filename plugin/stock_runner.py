@@ -10,10 +10,11 @@ from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 from windows_toasts import Toast, WindowsToaster, ToastDisplayImage
 
-configFile = os.path.expanduser("~/.stock.cfg.json")
-dataFile = os.path.expanduser("~/.stock.dat.json")
-dataLockFile = os.path.expanduser("~/.stock.dat.lock")
-logFile = os.path.expanduser("~/.stock.log")
+folder = os.path.expanduser("~/.stock")
+configFile = f"{folder}/.stock.cfg.json"
+dataFile = f"{folder}/.stock.dat.json"
+dataLockFile = f"{folder}/.stock.dat.lock"
+logFile = f"{folder}/.stock.log"
 
 Config = {}
 Stock_codes = ''
@@ -28,9 +29,10 @@ def log(msg):
 
 def global_exception_handler(exctype, value, tb):
     # import pdb; pdb.set_trace()
-    log(f"Exception: {exctype}, {value}")
+    error = traceback.format_exception(exctype, value, tb)
+    log(error)
     if exctype != KeyboardInterrupt:
-        toast(traceback.format_exception(exctype, value, tb))
+        toast(error)
     if OneObserver:
         OneObserver.stop()
         OneObserver.join()
@@ -52,10 +54,8 @@ def readConfig():
         try:
             Config = json.load(f)
         except:
-            errFile = os.path.expanduser("~/.stock.error")
-            with open(errFile, "w", encoding="utf-8") as f:
-                traceback.print_exc(file=f)
-                return
+            traceback.print_exc(file=logFile)
+            return
     Rests = Config["rest_dates"]
     for code in Config["codes"]:
         codeInt = int(code)
@@ -68,6 +68,7 @@ def readConfig():
 
     if len(Config["codes"]):
         Stock_codes = Stock_codes[:-1]
+    return True
 
 
 def retrieveStockData():
@@ -156,9 +157,9 @@ class ConfigFileEventHandler(PatternMatchingEventHandler):
     def on_modified(self, event):
         readConfig()
 
-readConfig()
+if not readConfig():
+    exit(1)
 
-# import pdb; pdb.set_trace()
 if inRest():
     with open(dataFile, 'w', encoding="utf-8") as fData:
         jsonData = {"runner_pid": os.getpid(), 'prices': retrieveStockData()}
@@ -192,7 +193,8 @@ with open(dataFile, 'w', encoding="utf-8") as fData, open(dataLockFile, "w", enc
     while True:
         # import pdb; pdb.set_trace()
         data = retrieveStockData()
-        checkNotify(data)
+        if type(data) is list:
+            checkNotify(data)
         jsonData['prices'] = data
 
         fLock.write('')
