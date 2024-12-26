@@ -128,7 +128,7 @@ function! s:ReadConfig()
     endif
   else
     call s:Log("File does not exist: " . g:stk_config_path)
-    let l:data = {"codes": [], "delay": 5, "threshold": {"indices": [2, 3, 4], "up": 7, "down": 5}, "rest_dates": []}
+    let l:data = {"codes": [], "delay": 5, "indices": ["s_sh000001","s_sz399001","s_sz399006","s_bj899050","rt_hkHSI"], "threshold": {"indices": [2, 3, 4, 5, 3], "up": 7, "down": 5}, "rest_dates": []}
     let l:json_content = json_encode(l:data)
     call writefile(split(l:json_content, "\n"), g:stk_config_path)
     return 0
@@ -221,10 +221,11 @@ function! s:DisplayPrices(timer)
       let g:airline_section_c = "Error"
       call airline#update_statusline()
     elseif !empty(l:data['prices'])
+      let l:countIndices = len(g:stk_config['indices'])
       let l:ix = 0
       let l:names = []
       for [key, value] in l:data['prices']
-        if l:ix < 3
+        if l:ix < l:countIndices
           let key = string(value)
           let valueStr = key
         else
@@ -232,13 +233,13 @@ function! s:DisplayPrices(timer)
         endif
 
         call add(l:names, key)
-        if l:ix < 3
+        if l:ix < l:countIndices
           call add(l:names, g:stk_sep)
         endif
         call airline#parts#define_text(key, valueStr)
 
         let l:undefined = 0
-        if l:ix < 3
+        if l:ix < l:countIndices
           let l:threshold = g:stk_config["threshold"]["indices"][ix]
           if value >= l:threshold
             call airline#parts#define_accent(key, 'up_hl')

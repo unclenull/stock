@@ -21,6 +21,7 @@ Stock_codes = ''
 Rests = []
 OneObserver = None
 Notified = []
+Indices = ''
 LogFileHandle = open(logFile, 'w+', encoding="utf-8")
 
 def log(msg):
@@ -50,12 +51,23 @@ def readConfig():
     global Config
     global Stock_codes
     global Rests
+    global Indices
     with open(configFile, "r", encoding="utf-8") as f:
         try:
             Config = json.load(f)
         except:
             traceback.print_exc(file=logFile)
             return
+
+    if len(Config["threshold"]['indices']) != len(Config['indices']):
+        log("Indices and thresholds mismatch.")
+        return
+
+    if len(Config["codes"]):
+        Stock_codes = Stock_codes[:-1]
+
+    Indices = ','.join(Config['indices'])
+
     Rests = Config["rest_dates"]
     for code in Config["codes"]:
         codeInt = int(code)
@@ -66,14 +78,12 @@ def readConfig():
         else:
             Stock_codes += "s_bj" + code + ","
 
-    if len(Config["codes"]):
-        Stock_codes = Stock_codes[:-1]
     return True
 
 
 def retrieveStockData():
     codes = '' if not len(Stock_codes) else ',' + Stock_codes
-    url = f"https://hq.sinajs.cn/rn={round(datetime.now().timestamp()*1000)}&list=s_sh000001,s_sz399001,s_sz399006{codes}"
+    url = f"https://hq.sinajs.cn/rn={round(datetime.now().timestamp()*1000)}&list={Indices}{codes}"
     # log(f"Retrieve stock data for: {url}")
     try:
         rsp = requests.get(
@@ -83,12 +93,20 @@ def retrieveStockData():
         if rsp.status_code == 200:
             data = []
             ls = rsp.text.split("\n")
+            # import pdb; pdb.set_trace()
             for item in ls:
                 if item == "":
                     continue
-                item = item[23:].split(",")
-                data.append([item[0][0:2], float(item[3])])
+                slices = item.split("=")[1][1:].split(",")
+                if slices[0] == "HSI":
+                    title = slices[1]
+                    val = slices[8]
+                else:
+                    title = slices[0]
+                    val = slices[3]
+                data.append([title[0:2], float(val)])
             # log(f"Stock data retrieved: {json.dumps(data)}")
+
             return data
         else:
             log(f"Failed to retrieve stock data, status code: {rsp.status_code}")
