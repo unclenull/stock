@@ -197,7 +197,7 @@ with open(dataFile, 'w', encoding="utf-8") as fData, open(dataLockFile, "w", enc
             checkNotify(data)
         jsonData['prices'] = data
 
-        fLock.write('')
+        fLock.write(' ')
         fLock.flush()
 
         fData.seek(0)
