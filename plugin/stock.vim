@@ -10,7 +10,7 @@ let g:stk_runner_lock_path = g:stk_folder . '/.stock.runner.lock'
 let g:stk_runner_path = expand('<sfile>:p:h') . "/stock_runner.py"
 let g:stk_config = {}
 let g:stk_last_read_time = 0
-let g:stk_schedule_timer = 0
+let g:stk_timer = 0
 
 function! s:Log(msg)
   echom "[STOCK-". strftime("%m/%d %H:%M") . '] ' . a:msg
@@ -88,6 +88,13 @@ function ReadDataInner()
     end
 end
 
+function CloseDataInner()
+    if file_handle then
+        file_handle:close()
+        file_handle = nil
+    end
+end
+
 function GetMidnight()
   -- Get the current time
   local now = os.time()
@@ -136,7 +143,7 @@ function! s:ReadConfig()
 endfunction
 
 function! s:InRest(timestamp = localtime())
-  if str2nr(strftime("%w", a:timestamp)) > 5 || index(g:stk_config['rest_dates'], strftime("%Y-%m-%d", a:timestamp)) > -1
+  if !(str2nr(strftime("%w", a:timestamp)) % 6) || index(g:stk_config['rest_dates'], strftime("%Y-%m-%d", a:timestamp)) > -1
     call s:Log('Today is a rest day')
     return 1
   else
@@ -161,7 +168,7 @@ function! s:StartRunner(check)
 
   try
     if a:check && has_key(l:data, 'runner_pid') && l:data['runner_pid'] > 0 && s:IsProcessRunning(l:data['runner_pid'])
-      call s:Log("is already running")
+      call s:Log("Runner is already running")
       throw ''
     endif
 
@@ -186,7 +193,7 @@ function! s:StartRunner(check)
       call s:LogErr(v:exception)
     endif
   finally
-    call timer_start(2000, { -> s:WaitPrices(localtime()) })
+    let g:stk_timer = timer_start(2000, { -> s:WaitPrices(localtime()) })
   endtry
 endfunction
 
@@ -195,7 +202,7 @@ function! s:WaitPrices(runner_time)
   if getftime(g:stk_data_path) > a:runner_time
     call s:DisplayPrices(0)
   else
-    call timer_start(1000, 's:WaitPrices')
+    let g:stk_timer = timer_start(1000, 's:WaitPrices')
   endif
 endfunction
 
@@ -203,15 +210,17 @@ function! s:DisplayPrices(timer)
   "echom 'DisplayPrices'"
   let l:tData = getftime(g:stk_data_path)
   let l:tLock = getftime(g:stk_data_lock_path)
+  echom 'Lock/Data: ' . strftime("%M:%S", l:tLock) . '/' . strftime("%M:%S", l:tData)
   if l:tLock > l:tData
     call s:Log('Data is locked')
-    call timer_start(500, 's:DisplayPrices')
+    let g:stk_timer = timer_start(500, 's:DisplayPrices')
     return
   endif
 
   let l:updated = l:tData > g:stk_last_read_time
   let l:data = s:ReadData()
-  if !l:updated && !s:IsProcessRunning(l:data['runner_pid'])
+  "Only check runner if called in market time (by schedule) & data is not updated by runner"
+  if a:timer && !l:updated && !s:IsProcessRunning(l:data['runner_pid'])
     call s:StartRunner(0)
     return
   endif
@@ -291,7 +300,7 @@ function! s:DisplayPrices(timer)
     elseif l:timehour > "1130" && l:timehour < "1300"
       let l:target_hour = 13
       let l:target_minute = 0
-    elseif l:timehour > "1500"
+    elseif l:timehour > "1600"
       call s:Log('Market closed')
       let l:target_days = s:FindNextOpenDay()
     endif
@@ -300,20 +309,20 @@ function! s:DisplayPrices(timer)
   if l:target_days
     let l:min = (24 * l:target_days - str2nr(strftime("%H"))) * 60 - str2nr(strftime("%M"))
     let l:min += 9 * 60 + 15
-    let g:stk_schedule_timer = timer_start(l:min * 60000, 's:StartRunner')
+    let g:stk_timer = timer_start(l:min * 60000, 's:StartRunner')
     call s:Log('Scheduled after ' . l:target_days . ' day(s) [' . strftime("%Y-%m-%d %a", localtime() + l:target_days * 86400) . ']')
     
   elseif l:target_hour
     let l:current_hour = str2nr(strftime("%H"))
     let l:current_minute = str2nr(strftime("%M"))
     let l:min = (l:target_hour - l:current_hour) * 60 + (l:target_minute - l:current_minute)
-    let g:stk_schedule_timer = timer_start(l:min * 60000, 's:StartRunner')
+    let g:stk_timer = timer_start(l:min * 60000, 's:StartRunner')
 
     let l:hour = l:min / 60
     let l:min = l:min % 60
     call s:Log('Scheduled after ' . l:hour . ':' . l:min)
   else
-    call timer_start(g:stk_config['delay'] * 1000, 's:DisplayPrices')
+    let g:stk_timer = timer_start(g:stk_config['delay'] * 1000, 's:DisplayPrices')
   endif
 endfunction
 
@@ -322,7 +331,7 @@ function! StockRun()
     let l:needRunner = 0
     let l:timehour = strftime("%H%M")
 
-    if s:InRest() || l:timehour < "0915" || l:timehour > "1130" && l:timehour < "1300" || l:timehour > "1500"
+    if s:InRest() || l:timehour < "0915" || l:timehour > "1130" && l:timehour < "1300" || l:timehour > "1600"
       let l:data_modified_time = getftime(g:stk_data_path)
       if getftime(g:stk_config_path) > l:data_modified_time
         let l:needRunner = 1
@@ -348,13 +357,17 @@ function! StockRun()
 endfunction
 
 function! StockUpdate()
-  if g:stk_schedule_timer
-    timer_stop(g:stk_schedule_timer)
-    let g:stk_schedule_timer = 0
+  if g:stk_timer
+    timer_stop(g:stk_timer)
+    let g:stk_timer = 0
   endif
   call StockRun()
 endfunction
 
+function! StockClean()
+  luaeval('CloseDataInner()')
+endfunction
 
 autocmd VimEnter * call StockRun()
-nnoremap <Leader>ss :call StockUpdate() 
+autocmd VimLeave * call StockClean()
+nnoremap <Leader>ss :call StockUpdate()

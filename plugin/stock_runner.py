@@ -179,9 +179,14 @@ if not readConfig():
     exit(1)
 
 if inRest():
-    with open(dataFile, 'w', encoding="utf-8") as fData:
-        jsonData = {"runner_pid": os.getpid(), 'prices': retrieveStockData()}
-        fData.write(json.dumps(jsonData))
+    if datetime.fromtimestamp(os.path.getmtime(dataFile)).date() != datetime.now().date():
+        with open(dataFile, 'w', encoding="utf-8") as fData, open(dataLockFile, "w", encoding="utf-8") as fLock:
+            fLock.write(' ')
+            fLock.flush()
+
+            jsonData = {"runner_pid": os.getpid(), 'prices': }
+            fData.write(json.dumps(jsonData))
+            log("Data updated.")
     log("Rest day, exit.")
     sys.exit(0)
 
@@ -194,7 +199,7 @@ OneObserver.start()
 time_start1 = datetime.strptime("9:15", "%H:%M").time()
 time_end1 = datetime.strptime("11:30", "%H:%M").time()
 time_start2 = datetime.strptime("13:00", "%H:%M").time()
-time_end2 = datetime.strptime("15:00", "%H:%M").time()
+time_end2 = datetime.strptime("16:00", "%H:%M").time()
 
 Data = {}
 if os.path.exists(dataFile):
@@ -203,13 +208,11 @@ if os.path.exists(dataFile):
         if dataStr:
             Data = json.loads(dataStr)
 with open(dataFile, 'w', encoding="utf-8") as fData, open(dataLockFile, "w", encoding="utf-8") as fLock:
-    data_modified_time = os.path.getmtime(dataFile)
-    data_modified_date = datetime.fromtimestamp(data_modified_time).date()
+    data_modified_date = datetime.fromtimestamp(os.path.getmtime(dataFile)).date()
     if data_modified_date == datetime.now().date() and "notified" in Data:
         Notified = Data["notified"]
     jsonData = {"runner_pid": os.getpid(), 'notified': Notified}
     while True:
-        # import pdb; pdb.set_trace()
         data = retrieveStockData()
         if type(data) is list:
             checkNotify(data)
@@ -217,11 +220,13 @@ with open(dataFile, 'w', encoding="utf-8") as fData, open(dataLockFile, "w", enc
 
         fLock.write(' ')
         fLock.flush()
+        log(f"1 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%M:%S')}")
 
         fData.seek(0)
         fData.write(json.dumps(jsonData))
         fData.truncate()
         fData.flush()
+        log(f"2 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%M:%S')}")
 
         now = datetime.now().time()
         if now >= time_start1 and now <= time_end1 \
