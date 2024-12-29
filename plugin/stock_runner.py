@@ -71,40 +71,29 @@ def readConfig():
     Rests = Config["rest_dates"]
     for code in Config["codes"]:
         codeInt = int(code)
-        if codeInt < 600000:
-            Stock_codes += "s_sz" + code + ","
-        elif codeInt < 800000:
-            Stock_codes += "s_sh" + code + ","
+        if codeInt > 600000 and codeInt < 700000:
+            Stock_codes += "1." + code + ","
         else:
-            Stock_codes += "s_bj" + code + ","
+            Stock_codes += "0." + code + ","
 
     return True
 
 
 def retrieveStockData():
     codes = '' if not len(Stock_codes) else ',' + Stock_codes
-    url = f"https://hq.sinajs.cn/rn={round(datetime.now().timestamp()*1000)}&list={Indices}{codes}"
-    # log(f"Retrieve stock data for: {url}")
+    url = f"https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids={Indices}{codes}&fields=f3,f14&cb=cb"
+    log(f"Retrieve stock data for: {url}")
     try:
         rsp = requests.get(
             url,
-            headers={"Referer": "https://finance.sina.com.cn"},
+            headers={"Referer": "https://guba.eastmoney.com/"},
         )
         if rsp.status_code == 200:
             data = []
-            ls = rsp.text.split("\n")
+            ls = json.loads(rsp.text[3:-2])['data']['diff']
             # import pdb; pdb.set_trace()
             for item in ls:
-                if item == "":
-                    continue
-                slices = item.split("=")[1][1:].split(",")
-                if slices[0] == "HSI":
-                    title = slices[1]
-                    val = slices[8]
-                else:
-                    title = slices[0]
-                    val = slices[3]
-                data.append([title[0:2], float(val)])
+                data.append([item['f14'].replace(' ', '')[0:2], item['f3']])
             # log(f"Stock data retrieved: {json.dumps(data)}")
 
             return data
@@ -179,12 +168,15 @@ if not readConfig():
     exit(1)
 
 if inRest():
-    if datetime.fromtimestamp(os.path.getmtime(dataFile)).date() != datetime.now().date():
+    tsData = os.path.getmtime(dataFile)
+    # if os.path.getmtime(configFile) > tsData or \
+    log(datetime.fromtimestamp(tsData).date() + ' ' + datetime.now().date())
+    if datetime.fromtimestamp(tsData).date() != datetime.now().date():
         with open(dataFile, 'w', encoding="utf-8") as fData, open(dataLockFile, "w", encoding="utf-8") as fLock:
             fLock.write(' ')
             fLock.flush()
 
-            jsonData = {"runner_pid": os.getpid(), 'prices': }
+            jsonData = {"runner_pid": os.getpid(), 'prices': retrieveStockData()}
             fData.write(json.dumps(jsonData))
             log("Data updated.")
     log("Rest day, exit.")
@@ -220,13 +212,13 @@ with open(dataFile, 'w', encoding="utf-8") as fData, open(dataLockFile, "w", enc
 
         fLock.write(' ')
         fLock.flush()
-        log(f"1 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%M:%S')}")
+        # log(f"1 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%M:%S')}")
 
         fData.seek(0)
         fData.write(json.dumps(jsonData))
         fData.truncate()
         fData.flush()
-        log(f"2 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%M:%S')}")
+        # log(f"2 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%M:%S')}")
 
         now = datetime.now().time()
         if now >= time_start1 and now <= time_end1 \
