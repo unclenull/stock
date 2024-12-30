@@ -240,6 +240,7 @@ function! s:DisplayPrices(timer)
     if type(l:data['prices']) == v:t_string
       let g:airline_section_c = "Error"
       call airline#update_statusline()
+      call s:Log(l:data['prices'])
     elseif !empty(l:data['prices'])
       let l:countIndices = len(g:stk_config['indices'])
       let l:ix = 0
@@ -297,7 +298,7 @@ function! s:DisplayPrices(timer)
       let g:airline_section_c = airline#section#create(l:names)
       call airline#update_statusline()
     else
-      call s:Log('No prices')
+      call s:Log('Prices are empty')
     endif
   else
     call s:Log('No prices')
@@ -384,5 +385,5 @@ function! StockClean()
 endfunction
 
 autocmd VimEnter * call StockRun()
-"autocmd VimLeave * call StockClean()
+autocmd VimLeave * call StockClean()
 nnoremap <Leader>ss :call StockUpdate()

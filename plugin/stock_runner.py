@@ -202,31 +202,34 @@ if os.path.exists(dataFile):
         dataStr = fData.read()
         if dataStr:
             Data = json.loads(dataStr)
-with open(dataFile, 'w', encoding="utf-8") as fData, open(dataLockFile, "w", encoding="utf-8") as fLock:
-    data_modified_date = datetime.fromtimestamp(os.path.getmtime(dataFile)).date()
-    if data_modified_date == datetime.now().date() and "notified" in Data:
-        Notified = Data["notified"]
-    JsonData = {"runner_pid": os.getpid(), 'notified': Notified}
-    while True:
-        data = retrieveStockData()
-        if type(data) is list:
-            checkNotify(data)
-        JsonData['prices'] = data
+with open(dataLockFile, "w", encoding="utf-8") as fLock:
+    fLock.write(' ')
+    fLock.flush()
+    with open(dataFile, 'w', encoding="utf-8") as fData:
+        data_modified_date = datetime.fromtimestamp(os.path.getmtime(dataFile)).date()
+        if data_modified_date == datetime.now().date() and "notified" in Data:
+            Notified = Data["notified"]
+        JsonData = {"runner_pid": os.getpid(), 'notified': Notified}
+        while True:
+            data = retrieveStockData()
+            if type(data) is list:
+                checkNotify(data)
+            JsonData['prices'] = data
 
-        fLock.write(' ')
-        fLock.flush()
-        # log(f"1 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%M:%S')}")
+            fLock.write(' ')
+            fLock.flush()
+            # log(f"1 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%M:%S')}")
 
-        fData.seek(0)
-        fData.write(json.dumps(JsonData))
-        fData.truncate()
-        fData.flush()
-        # log(f"2 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%M:%S')}")
+            fData.seek(0)
+            fData.write(json.dumps(JsonData))
+            fData.truncate()
+            fData.flush()
+            # log(f"2 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%M:%S')}")
 
-        now = datetime.now().time()
-        if now >= time_start1 and now <= time_end1 \
-                or now >= time_start2 and now <= time_end2:
-            time.sleep(Config['delay'])
-        else:
-            log("Market inactive, exit.")
-            break
+            now = datetime.now().time()
+            if now >= time_start1 and now <= time_end1 \
+                    or now >= time_start2 and now <= time_end2:
+                time.sleep(Config['delay'])
+            else:
+                log("Market inactive, exit.")
+                break
