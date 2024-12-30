@@ -21,6 +21,7 @@ Stock_codes = ''
 Rests = []
 OneObserver = None
 Notified = []
+JsonData = None
 Indices = ''
 LogFileHandle = open(logFile, 'w+', encoding="utf-8")
 
@@ -48,10 +49,8 @@ def cleanup():
 atexit.register(cleanup)
 
 def readConfig():
-    global Config
-    global Stock_codes
-    global Rests
-    global Indices
+    global Config, Stock_codes, Rests, Indices, Notified, JsonData
+
     with open(configFile, "r", encoding="utf-8") as f:
         try:
             Config = json.load(f)
@@ -67,6 +66,10 @@ def readConfig():
         Stock_codes = Stock_codes[:-1]
 
     Indices = ','.join(Config['indices'])
+
+    Notified = []
+    if JsonData:
+        JsonData = {"runner_pid": JsonData["runner_pid"], 'notified': []}
 
     Rests = Config["rest_dates"]
     for code in Config["codes"]:
@@ -176,8 +179,8 @@ if inRest():
             fLock.write(' ')
             fLock.flush()
 
-            jsonData = {"runner_pid": os.getpid(), 'prices': retrieveStockData()}
-            fData.write(json.dumps(jsonData))
+            data = {"runner_pid": os.getpid(), 'prices': retrieveStockData()}
+            fData.write(json.dumps(data))
             log("Data updated.")
     log("Rest day, exit.")
     sys.exit(0)
@@ -203,19 +206,19 @@ with open(dataFile, 'w', encoding="utf-8") as fData, open(dataLockFile, "w", enc
     data_modified_date = datetime.fromtimestamp(os.path.getmtime(dataFile)).date()
     if data_modified_date == datetime.now().date() and "notified" in Data:
         Notified = Data["notified"]
-    jsonData = {"runner_pid": os.getpid(), 'notified': Notified}
+    JsonData = {"runner_pid": os.getpid(), 'notified': Notified}
     while True:
         data = retrieveStockData()
         if type(data) is list:
             checkNotify(data)
-        jsonData['prices'] = data
+        JsonData['prices'] = data
 
         fLock.write(' ')
         fLock.flush()
         # log(f"1 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%M:%S')}")
 
         fData.seek(0)
-        fData.write(json.dumps(jsonData))
+        fData.write(json.dumps(JsonData))
         fData.truncate()
         fData.flush()
         # log(f"2 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%M:%S')}")

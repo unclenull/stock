@@ -10,6 +10,7 @@ let g:stk_runner_lock_path = g:stk_folder . '/.stock.runner.lock'
 let g:stk_runner_path = expand('<sfile>:p:h') . "/stock_runner.py"
 let g:stk_config = {}
 let g:stk_last_read_time = 0
+let g:stk_cfg_ts = 0
 let g:stk_timer = 0
 
 function! s:Log(msg)
@@ -36,8 +37,10 @@ call airline#highlighter#add_accent('down')
 call airline#highlighter#add_accent('down_hl')
 call airline#highlighter#add_accent('even')
 
-let g:stk_sep = '/'
-call airline#parts#define_accent(g:stk_sep, 'even')
+let g:stk_sep1 = '/'
+let g:stk_sep2 = '|'
+call airline#parts#define_accent(g:stk_sep1, 'even')
+call airline#parts#define_accent(g:stk_sep2, 'even')
 
 function! s:IsProcessRunning(pid)
   let l:running = 0
@@ -125,6 +128,8 @@ endfunction
 
 function! s:ReadConfig()
   if filereadable(g:stk_config_path)
+    let g:stk_cfg_ts = getftime(g:stk_config_path)
+
     let l:json_content = join(readfile(g:stk_config_path), "\n")
     let g:stk_config = json_decode(l:json_content)
     if empty(g:stk_config['codes'])
@@ -208,6 +213,12 @@ endfunction
 
 function! s:DisplayPrices(timer)
   "echom 'DisplayPrices'"
+  let l:tCfg = getftime(g:stk_config_path)
+  if l:tCfg > g:stk_cfg_ts
+    call s:ReadConfig()
+    g:stk_cfg_ts = l:tCfg
+  endif
+
   let l:tData = getftime(g:stk_data_path)
   let l:tLock = getftime(g:stk_data_lock_path)
   echom 'Lock/Data: ' . strftime("%M:%S", l:tLock) . '/' . strftime("%M:%S", l:tData)
@@ -243,7 +254,11 @@ function! s:DisplayPrices(timer)
 
         call add(l:names, key)
         if l:ix < l:countIndices
-          call add(l:names, g:stk_sep)
+          if l:ix == 2
+            call add(l:names, g:stk_sep2)
+          else
+            call add(l:names, g:stk_sep1)
+          endif
         endif
         call airline#parts#define_text(key, valueStr)
 
@@ -365,9 +380,9 @@ function! StockUpdate()
 endfunction
 
 function! StockClean()
-  luaeval('CloseDataInner()')
+  lua CloseDataInner()
 endfunction
 
 autocmd VimEnter * call StockRun()
-autocmd VimLeave * call StockClean()
+"autocmd VimLeave * call StockClean()
 nnoremap <Leader>ss :call StockUpdate()
