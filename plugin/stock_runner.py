@@ -202,10 +202,13 @@ if os.path.exists(dataFile):
         dataStr = fData.read()
         if dataStr:
             Data = json.loads(dataStr)
-with open(dataLockFile, "w", encoding="utf-8") as fLock:
-    fLock.write(' ')
-    fLock.flush()
-    with open(dataFile, 'w', encoding="utf-8") as fData:
+
+if os.path.exists(dataLockFile): # prevent reading empty data file
+    os.remove(dataLockFile)
+
+with open(dataFile, 'w', encoding="utf-8") as fData:
+    time.sleep(0.1)
+    with open(dataLockFile, "w", encoding="utf-8") as fLock:
         data_modified_date = datetime.fromtimestamp(os.path.getmtime(dataFile)).date()
         if data_modified_date == datetime.now().date() and "notified" in Data:
             Notified = Data["notified"]

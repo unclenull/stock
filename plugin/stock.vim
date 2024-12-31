@@ -220,7 +220,11 @@ function! s:DisplayPrices(timer)
   endif
 
   let l:tData = getftime(g:stk_data_path)
-  let l:tLock = getftime(g:stk_data_lock_path)
+  if !filereadable(g:stk_data_lock_path)
+    let l:tLock = 12345678901
+  else
+    let l:tLock = getftime(g:stk_data_lock_path)
+  endif
   echom 'Lock/Data: ' . strftime("%M:%S", l:tLock) . '/' . strftime("%M:%S", l:tData)
   if l:tLock > l:tData
     call s:Log('Data is locked')
@@ -347,7 +351,10 @@ function! StockRun()
     let l:needRunner = 0
     let l:timehour = strftime("%H%M")
 
-    if s:InRest() || l:timehour < "0915" || l:timehour > "1130" && l:timehour < "1300" || l:timehour > "1600"
+    "Always for market days, since we don't know whether the data is the latest"
+    let l:needRunner = 1
+    if s:InRest()
+      let l:needRunner = 0
       let l:data_modified_time = getftime(g:stk_data_path)
       if getftime(g:stk_config_path) > l:data_modified_time
         let l:needRunner = 1
@@ -360,8 +367,6 @@ function! StockRun()
           let l:needRunner = 1
         endif
       endif
-    else
-      let l:needRunner = 1
     endif
 
     if l:needRunner
