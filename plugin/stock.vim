@@ -147,9 +147,17 @@ function! s:ReadConfig()
   endif
 endfunction
 
-function! s:InRest(timestamp = localtime())
-  if !(str2nr(strftime("%w", a:timestamp)) % 6) || index(g:stk_config['rest_dates'], strftime("%Y-%m-%d", a:timestamp)) > -1
-    call s:Log('Today is a rest day')
+function! s:InRest(...)
+  if a:0 == 0
+    let l:timestamp = localtime()
+    let l:date = 'Today'
+  else
+    let l:timestamp = a:1
+    let l:date = strftime("%Y-%m-%d", l:timestamp)
+  endif
+
+  if !(str2nr(strftime("%w", l:timestamp)) % 6) || index(g:stk_config['rest_dates'], l:date) > -1
+    call s:Log(l:date . ' is a rest day')
     return 1
   else
     return 0
@@ -242,7 +250,7 @@ function! s:DisplayPrices(timer)
 
   if has_key(l:data, 'prices')
     if type(l:data['prices']) == v:t_string
-      let g:airline_section_c = "Error"
+      let g:airline_section_c = "[STOCK] Error"
       call airline#update_statusline()
       call s:Log(l:data['prices'])
     elseif !empty(l:data['prices'])
