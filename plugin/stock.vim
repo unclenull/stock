@@ -3,10 +3,10 @@ if !isdirectory(g:stk_folder)
   call mkdir(g:stk_folder)
 endif
 
-let g:stk_config_path = g:stk_folder . '/.stock.cfg.json'
-let g:stk_data_path = g:stk_folder. '/.stock.dat.json'
-let g:stk_data_lock_path = g:stk_folder . '/.stock.dat.lock'
-let g:stk_runner_lock_path = g:stk_folder . '/.stock.runner.lock'
+let g:stk_config_path = g:stk_folder . '/stock.cfg.json'
+let g:stk_data_path = g:stk_folder. '/stock.dat.json'
+let g:stk_data_lock_path = g:stk_folder . '/stock.dat.lock'
+let g:stk_runner_lock_path = g:stk_folder . '/stock.runner.lock'
 let g:stk_runner_path = expand('<sfile>:p:h') . "/stock_runner.py"
 let g:stk_config = {}
 let g:stk_last_read_time = 0

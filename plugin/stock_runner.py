@@ -11,10 +11,10 @@ from watchdog.events import PatternMatchingEventHandler
 from windows_toasts import Toast, WindowsToaster, ToastDisplayImage
 
 folder = os.path.expanduser("~/.stock")
-configFile = f"{folder}/.stock.cfg.json"
-dataFile = f"{folder}/.stock.dat.json"
-dataLockFile = f"{folder}/.stock.dat.lock"
-logFile = f"{folder}/.stock.log"
+configFile = f"{folder}/stock.cfg.json"
+dataFile = f"{folder}/stock.dat.json"
+dataLockFile = f"{folder}/stock.dat.lock"
+logFile = f"{folder}/stock.log"
 
 Config = {}
 Stock_codes = ''
@@ -23,10 +23,10 @@ OneObserver = None
 Notified = []
 JsonData = None
 Indices = ''
-LogFileHandle = open(logFile, 'w+', encoding="utf-8")
+LogFileHandle = open(logFile, 'a', encoding="utf-8")
 
 def log(msg):
-    LogFileHandle.write(f"{datetime.now().strftime('%m-%d %H:%M')}: {msg}\n")
+    LogFileHandle.write(f"{datetime.now().strftime('%m-%d %H:%M:%S')}: {msg}\n")
     LogFileHandle.flush()
 
 def global_exception_handler(exctype, value, tb):
@@ -85,7 +85,7 @@ def readConfig():
 def retrieveStockData():
     codes = '' if not len(Stock_codes) else ',' + Stock_codes
     url = f"https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids={Indices}{codes}&fields=f3,f14&cb=cb"
-    log(f"Retrieve stock data for: {url}")
+    # log(f"Retrieve stock data for: {url}")
     try:
         rsp = requests.get(
             url,
@@ -221,13 +221,13 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
 
             fLock.write(' ')
             fLock.flush()
-            # log(f"1 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%M:%S')}")
+            log(f"1 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%H:%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%H:%M:%S')}")
 
             fData.seek(0)
             fData.write(json.dumps(JsonData))
             fData.truncate()
             fData.flush()
-            # log(f"2 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%M:%S')}")
+            log(f"2 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%H:%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%H:%M:%S')}")
 
             now = datetime.now().time()
             if now >= time_start1 and now <= time_end1 \
