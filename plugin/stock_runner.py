@@ -85,13 +85,14 @@ def readConfig():
 def retrieveStockData():
     codes = '' if not len(Stock_codes) else ',' + Stock_codes
     url = f"https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids={Indices}{codes}&fields=f3,f14&cb=cb"
-    # log(f"Retrieve stock data for: {url}")
+    print(f"Retrieve stock data for: {url}")
     try:
         rsp = requests.get(
             url,
             headers={"Referer": "https://guba.eastmoney.com/"},
         )
         if rsp.status_code == 200:
+            print(rsp.text)
             data = []
             ls = json.loads(rsp.text[3:-2])['data']['diff']
             # import pdb; pdb.set_trace()
@@ -171,10 +172,13 @@ if not readConfig():
     exit(1)
 
 if inRest():
-    tsData = os.path.getmtime(dataFile)
+    if os.path.exists(dataFile):
+        tsData = os.path.getmtime(dataFile)
+    else:
+        tsData = 0
     # if os.path.getmtime(configFile) > tsData or \
-    log(datetime.fromtimestamp(tsData).date() + ' ' + datetime.now().date())
-    if datetime.fromtimestamp(tsData).date() != datetime.now().date():
+    log(datetime.fromtimestamp(tsData).strftime('%m-%d') + ' ' + datetime.now().strftime('%m-%d'))
+    if True or datetime.fromtimestamp(tsData).date() != datetime.now().date():
         with open(dataFile, 'w', encoding="utf-8") as fData, open(dataLockFile, "w", encoding="utf-8") as fLock:
             fLock.write(' ')
             fLock.flush()

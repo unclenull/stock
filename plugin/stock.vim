@@ -1,3 +1,7 @@
+" Rest days
+" http://tools.2345.com/rili.htm
+" formateJxData()
+
 let g:stk_folder = $HOME . '/.stock'
 if !isdirectory(g:stk_folder)
   call mkdir(g:stk_folder)
@@ -134,13 +138,11 @@ function! s:ReadConfig()
     let g:stk_config = json_decode(l:json_content)
     if empty(g:stk_config['codes'])
       call s:Log('No stock code defined')
-      return 0
-    else
       return 1
     endif
   else
     call s:Log("File does not exist: " . g:stk_config_path)
-    let l:data = {"codes": [], "delay": 5, "indices": ["s_sh000001","s_sz399001","s_sz399006","s_bj899050","rt_hkHSI"], "threshold": {"indices": [2, 3, 4, 5, 3], "up": 7, "down": 5}, "rest_dates": []}
+    let l:data = {"codes": [], "indices": ["1.000001", "0.399001", "0.399006", "0.899050", "1.000985", "100.HSI"], "threshold": {"indices": [2, 3, 4, 5, 2, 3], "up": 7, "down": 5}, "delay": 5, "rest_dates": []}
     let l:json_content = json_encode(l:data)
     call writefile(split(l:json_content, "\n"), g:stk_config_path)
     return 0
