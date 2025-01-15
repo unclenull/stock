@@ -88,7 +88,9 @@ function ReadDataInner()
 
     if file_handle then
         file_handle:seek("set")
-        return file_handle:read("*all")
+        data = file_handle:read("*all")
+        -- print(data)
+        return data
     else
         vim.api.nvim_command('call s:LogErr("File handle is not available")')
         return ""

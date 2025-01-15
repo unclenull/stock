@@ -208,9 +208,15 @@ if os.path.exists(dataFile):
             Data = json.loads(dataStr)
 
 if os.path.exists(dataLockFile): # prevent reading empty data file
-    os.remove(dataLockFile)
+    try:
+        os.remove(dataLockFile)
+    except FileNotFoundError:
+        pass  # File was already removed by another process
 
-data_modified_date = datetime.fromtimestamp(os.path.getmtime(dataFile)).date()
+if os.path.exists(dataFile):
+    data_modified_date = datetime.fromtimestamp(os.path.getmtime(dataFile)).date()
+else:
+    data_modified_date = 0
 with open(dataFile, 'w', encoding="utf-8") as fData:
     time.sleep(0.1)
     with open(dataLockFile, "w", encoding="utf-8") as fLock:
