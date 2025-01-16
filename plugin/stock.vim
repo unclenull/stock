@@ -190,22 +190,30 @@ function! s:StartRunner(check)
       throw ''
     endif
 
-    if filereadable(g:stk_runner_lock_path)
+    try
+      call mkdir(g:stk_runner_lock_path)
+    catch
+      call s:LogErr(v:exception)
       call s:Log("Runner is starting by another instance")
       throw ''
-    endif
-    call writefile([], g:stk_runner_lock_path)
+    endtry
+
     let l:jobid = jobstart(["python", g:stk_runner_path])
+    let l:failed = 0
     if l:jobid == -1
       call s:LogErr("runner not executable")
-      throw ''
+      let l:failed = 1
     elseif l:jobid == 0
       call s:LogErr("runner with invalid arguments")
-      throw ''
+      let l:failed = 1
     endif
 
-    call delete(g:stk_runner_lock_path)
-    call s:Log("Runner started")
+    call delete(g:stk_runner_lock_path, 'd')
+    if l:failed
+      throw ''
+    else
+      call s:Log("Runner started")
+    endif
   catch
     if v:exception != ''
       call s:LogErr(v:exception)
