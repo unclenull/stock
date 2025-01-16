@@ -117,6 +117,7 @@ function GetMidnight()
   date_table.sec = 0
 
   -- Get the Unix timestamp for the start of the day
+  -- print(vim.inspect(date_table))
   return os.time(date_table)
 end
 EOF
@@ -396,7 +397,7 @@ function! StockRun()
             let l:needRunner = 1
           endif
         elseif l:timehour > "1600"
-          if l:data_modified_time < l:today_start + 16 * 3600 + 30 * 60
+          if l:data_modified_time < l:today_start + 16 * 3600
             let l:needRunner = 1
           endif
         else
