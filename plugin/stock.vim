@@ -152,7 +152,7 @@ function! s:ReadConfig()
   endif
 endfunction
 
-function! s:InRest(...)
+function! s:InRestDay(...)
   if a:0 == 0
     let l:timestamp = localtime()
     let l:date = 'Today'
@@ -175,7 +175,7 @@ function! s:FindNextOpenDay()
   while 1
     let l:days += 1
     let l:timestamp += 86400  "24 * 60 * 60"
-    if !s:InRest(l:timestamp)
+    if !s:InRestDay(l:timestamp)
       return l:days
     endif
   endwhile
@@ -331,7 +331,7 @@ function! s:DisplayPrices(timer)
 
   let l:target_days = 0
   let l:target_hour = 0
-  if s:InRest()
+  if s:InRestDay()
     let l:target_days = s:FindNextOpenDay()
   else
     let l:timehour = strftime("%H%M")
@@ -352,7 +352,6 @@ function! s:DisplayPrices(timer)
     let l:min += 9 * 60 + 15
     let g:stk_timer = timer_start(l:min * 60000, 's:StartRunner')
     call s:Log('Scheduled after ' . l:target_days . ' day(s) [' . strftime("%Y-%m-%d %a", localtime() + l:target_days * 86400) . ']')
-    
   elseif l:target_hour
     let l:current_hour = str2nr(strftime("%H"))
     let l:current_minute = str2nr(strftime("%M"))
@@ -373,18 +372,34 @@ function! StockRun()
     let l:timehour = strftime("%H%M")
 
     "Always for market days, since we don't know whether the data is the latest"
-    let l:needRunner = 1
-    if s:InRest()
-      let l:needRunner = 0
-      let l:data_modified_time = getftime(g:stk_data_path)
-      if getftime(g:stk_config_path) > l:data_modified_time
-        let l:needRunner = 1
-      else
+    let l:needRunner = 0
+    let l:data_modified_time = getftime(g:stk_data_path)
+    if getftime(g:stk_config_path) > l:data_modified_time
+      let l:needRunner = 1
+    else
+      let l:today_start = luaeval('GetMidnight()')
+      if s:InRestDay()
         "strptime is not available on windows"
-        let l:today_start = luaeval('GetMidnight()')
-
+        "Simpler way to ensure it's the latest"
         if l:data_modified_time < l:today_start
-          echom 'data modified time: ' . l:data_modified_time . ' today start: ' . l:today_start
+          "echom 'data modified time: ' . l:data_modified_time . ' today start: ' . l:today_start"
+          let l:needRunner = 1
+        endif
+      else
+        let l:timehour = strftime("%H%M")
+        if l:timehour < "0915"
+          if l:data_modified_time < l:today_start
+            let l:needRunner = 1
+          endif
+        elseif l:timehour > "1130" && l:timehour < "1300"
+          if l:data_modified_time < l:today_start + 11 * 3600 + 30 * 60
+            let l:needRunner = 1
+          endif
+        elseif l:timehour > "1600"
+          if l:data_modified_time < l:today_start + 16 * 3600 + 30 * 60
+            let l:needRunner = 1
+          endif
+        else
           let l:needRunner = 1
         endif
       endif
