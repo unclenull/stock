@@ -247,7 +247,7 @@ function! s:DisplayPrices(timer)
   else
     let l:tLock = getftime(g:stk_data_lock_path)
   endif
-  echom 'Lock/Data: ' . strftime("%M:%S", l:tLock) . '/' . strftime("%M:%S", l:tData)
+  "echom 'Lock/Data: ' . strftime("%M:%S", l:tLock) . '/' . strftime("%M:%S", l:tData)"
   if l:tLock > l:tData
     call s:Log('Data is locked')
     let g:stk_timer = timer_start(500, 's:DisplayPrices')

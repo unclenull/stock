@@ -178,7 +178,7 @@ if inRest():
         tsData = 0
     # if os.path.getmtime(configFile) > tsData or \
     log(datetime.fromtimestamp(tsData).strftime('%m-%d') + ' ' + datetime.now().strftime('%m-%d'))
-    if True or datetime.fromtimestamp(tsData).date() != datetime.now().date():
+    if datetime.fromtimestamp(tsData).date() != datetime.now().date():
         with open(dataFile, 'w', encoding="utf-8") as fData, open(dataLockFile, "w", encoding="utf-8") as fLock:
             fLock.write(' ')
             fLock.flush()
@@ -231,13 +231,13 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
 
             fLock.write(' ')
             fLock.flush()
-            log(f"1 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%H:%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%H:%M:%S')}")
+            # log(f"1 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%H:%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%H:%M:%S')}")
 
             fData.seek(0)
             fData.write(json.dumps(JsonData))
             fData.truncate()
             fData.flush()
-            log(f"2 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%H:%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%H:%M:%S')}")
+            # log(f"2 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%H:%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%H:%M:%S')}")
 
             now = datetime.now().time()
             if now >= time_start1 and now <= time_end1 \
