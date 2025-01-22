@@ -5,6 +5,7 @@ import time
 import traceback
 import atexit
 from datetime import datetime
+import random
 import requests
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
@@ -14,6 +15,7 @@ folder = os.path.expanduser("~/.stock")
 configFile = f"{folder}/stock.cfg.json"
 dataFile = f"{folder}/stock.dat.json"
 dataLockFile = f"{folder}/stock.dat.lock"
+runnerFile = f"{folder}/stock.runner.pid"
 logFile = f"{folder}/stock.log"
 
 Config = {}
@@ -26,7 +28,7 @@ Indices = ''
 LogFileHandle = open(logFile, 'a', encoding="utf-8")
 
 def log(msg):
-    LogFileHandle.write(f"{datetime.now().strftime('%m-%d %H:%M:%S')}: {msg}\n")
+    LogFileHandle.write(f"{datetime.now().strftime('%m-%d %H:%M:%S')}({time.time()}): {msg}\n")
     LogFileHandle.flush()
 
 def global_exception_handler(exctype, value, tb):
@@ -45,6 +47,7 @@ sys.excepthook = global_exception_handler
 
 def cleanup():
     LogFileHandle.close()
+    os.remove(runnerFile)
 
 atexit.register(cleanup)
 
@@ -68,8 +71,8 @@ def readConfig():
     Indices = ','.join(Config['indices'])
 
     Notified = []
-    if JsonData:
-        JsonData = {"runner_pid": JsonData["runner_pid"], 'notified': []}
+    if JsonData: # in running
+        JsonData = {'notified': []}
 
     Rests = Config["rest_dates"]
     for code in Config["codes"]:
@@ -168,6 +171,8 @@ class ConfigFileEventHandler(PatternMatchingEventHandler):
     def on_modified(self, event):
         readConfig()
 
+log(f"Stock runner ({os.getpid()}) starting")
+
 if not readConfig():
     exit(1)
 
@@ -177,15 +182,15 @@ if inRest():
     else:
         tsData = 0
     # if os.path.getmtime(configFile) > tsData or \
-    log(datetime.fromtimestamp(tsData).strftime('%m-%d') + ' ' + datetime.now().strftime('%m-%d'))
+    # log(datetime.fromtimestamp(tsData).strftime('%m-%d') + ' ' + datetime.now().strftime('%m-%d'))
     if datetime.fromtimestamp(tsData).date() != datetime.now().date():
         with open(dataFile, 'w', encoding="utf-8") as fData, open(dataLockFile, "w", encoding="utf-8") as fLock:
             fLock.write(' ')
             fLock.flush()
 
-            data = {"runner_pid": os.getpid(), 'prices': retrieveStockData()}
+            data = {'prices': retrieveStockData()}
             fData.write(json.dumps(data))
-            log("Data updated.")
+            # log("Data updated.")
     log("Rest day, exit.")
     sys.exit(0)
 
@@ -207,7 +212,7 @@ if os.path.exists(dataFile):
         if dataStr:
             Data = json.loads(dataStr)
 
-if os.path.exists(dataLockFile): # prevent reading empty data file
+if os.path.exists(dataLockFile): # prevent reading empty data file (still happen when waiting retrieving)
     try:
         os.remove(dataLockFile)
     except FileNotFoundError:
@@ -218,11 +223,12 @@ if os.path.exists(dataFile):
 else:
     data_modified_date = 0
 with open(dataFile, 'w', encoding="utf-8") as fData:
+    # log(f'Data opened')
     time.sleep(0.1)
     with open(dataLockFile, "w", encoding="utf-8") as fLock:
         if data_modified_date == datetime.now().date() and "notified" in Data:
             Notified = Data["notified"]
-        JsonData = {"runner_pid": os.getpid(), 'notified': Notified}
+        JsonData = {'notified': Notified}
         while True:
             data = retrieveStockData()
             if type(data) is list:
@@ -237,12 +243,13 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
             fData.write(json.dumps(JsonData))
             fData.truncate()
             fData.flush()
+            # log(f"Data modified: {os.path.getmtime(dataFile)}")
             # log(f"2 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%H:%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%H:%M:%S')}")
 
             now = datetime.now().time()
             if now >= time_start1 and now <= time_end1 \
                     or now >= time_start2 and now <= time_end2:
-                time.sleep(Config['delay'])
+                time.sleep(random.randint(Config['delay']-2, Config['delay']))
             else:
                 log("Market inactive, exit.")
                 break

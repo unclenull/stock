@@ -10,7 +10,7 @@ endif
 let g:stk_config_path = g:stk_folder . '/stock.cfg.json'
 let g:stk_data_path = g:stk_folder. '/stock.dat.json'
 let g:stk_data_lock_path = g:stk_folder . '/stock.dat.lock'
-let g:stk_runner_lock_path = g:stk_folder . '/stock.runner.lock'
+let g:stk_runner_pid_path = g:stk_folder . '/stock.runner.pid'
 let g:stk_runner_path = expand('<sfile>:p:h') . "/stock_runner.py"
 let g:stk_config = {}
 let g:stk_last_read_time = 0
@@ -18,12 +18,12 @@ let g:stk_cfg_ts = 0
 let g:stk_timer = 0
 
 function! s:Log(msg)
-  echom "[STOCK-". strftime("%m/%d %H:%M") . '] ' . a:msg
+  echom "[STOCK-". strftime("%m/%d %H:%M:%S") . '] ' . a:msg
 endfunction
 
 function! s:LogErr(msg)
   echohl WarningMsg
-  echom "[STOCK-". strftime("%m/%d %H:%M") . ']ERROR: ' . a:msg
+  echom "[STOCK-". strftime("%m/%d %H:%M:%S") . ']ERROR: ' . a:msg
   echohl None
 endfunction
 
@@ -184,23 +184,26 @@ endfunction
 
 function! s:StartRunner(check)
   let l:data = s:ReadData()
+  let l:failed = 0
 
   try
-    if a:check && has_key(l:data, 'runner_pid') && l:data['runner_pid'] > 0 && s:IsProcessRunning(l:data['runner_pid'])
-      call s:Log("Runner is already running")
-      throw ''
+    if a:check && filereadable(g:stk_runner_pid_path)
+      if getfsize(g:stk_runner_pid_path) > 0
+        let l:pid = readfile(g:stk_runner_pid_path)[0]
+        "echom 'pid: ' . l:pid"
+        if s:IsProcessRunning(l:pid)
+          call s:Log("Runner is already running")
+          throw ''
+        endif
+      else
+        call s:Log("Runner is starting by another instance")
+        throw ''
+      endif
     endif
 
-    try
-      call mkdir(g:stk_runner_lock_path)
-    catch
-      call s:LogErr(v:exception)
-      call s:Log("Runner is starting by another instance")
-      throw ''
-    endtry
+    call writefile([""], g:stk_runner_pid_path)
 
     let l:jobid = jobstart(["python", g:stk_runner_path])
-    let l:failed = 0
     if l:jobid == -1
       call s:LogErr("runner not executable")
       let l:failed = 1
@@ -209,27 +212,31 @@ function! s:StartRunner(check)
       let l:failed = 1
     endif
 
-    call delete(g:stk_runner_lock_path, 'd')
     if l:failed
       throw ''
     else
-      call s:Log("Runner started")
+      let l:timestamp = localtime()
+      call s:Log("Runner started at " . string(l:timestamp))
+      call writefile([string(jobpid(l:jobid))], g:stk_runner_pid_path)
     endif
   catch
     if v:exception != ''
+      let l:failed = 1
       call s:LogErr(v:exception)
     endif
   finally
-    let g:stk_timer = timer_start(2000, { -> s:WaitPrices(localtime()) })
+      if !l:failed
+        let g:stk_timer = timer_start(2000, { -> s:WaitPrices(localtime()) })
+      endif
   endtry
 endfunction
 
 function! s:WaitPrices(runner_time)
-  "echom 'WaitPrices'"
-  if getftime(g:stk_data_path) > a:runner_time
+  "echom 'WaitPrices ' . getftime(g:stk_data_path)"
+  if getftime(g:stk_data_path) >= a:runner_time
     call s:DisplayPrices(0)
   else
-    let g:stk_timer = timer_start(1000, 's:WaitPrices')
+    let g:stk_timer = timer_start(1000, { -> s:WaitPrices(a:runner_time) })
   endif
 endfunction
 
@@ -247,7 +254,7 @@ function! s:DisplayPrices(timer)
   else
     let l:tLock = getftime(g:stk_data_lock_path)
   endif
-  "echom 'Lock/Data: ' . strftime("%M:%S", l:tLock) . '/' . strftime("%M:%S", l:tData)"
+  "echom 'Lock/Data: ' . string(l:tLock) . '/' . string(l:tData)"
   if l:tLock > l:tData
     call s:Log('Data is locked')
     let g:stk_timer = timer_start(500, 's:DisplayPrices')
@@ -257,77 +264,81 @@ function! s:DisplayPrices(timer)
   let l:updated = l:tData > g:stk_last_read_time
   let l:data = s:ReadData()
   "Only check runner if called in market time (by schedule) & data is not updated by runner"
-  if a:timer && !l:updated && !s:IsProcessRunning(l:data['runner_pid'])
-    call s:StartRunner(0)
-    return
-  endif
-
-  if has_key(l:data, 'prices')
-    if type(l:data['prices']) == v:t_string
-      let g:airline_section_c = "[STOCK] Error"
-      call airline#update_statusline()
-      call s:Log(l:data['prices'])
-    elseif !empty(l:data['prices'])
-      let l:countIndices = len(g:stk_config['indices'])
-      let l:ix = 0
-      let l:names = []
-      for [key, value] in l:data['prices']
-        if l:ix < l:countIndices
-          let key = string(value)
-          let valueStr = key
-        else
-          let valueStr = key . value
-        endif
-
-        call add(l:names, key)
-        if l:ix < l:countIndices
-          if l:ix == 2
-            call add(l:names, g:stk_sep2)
-          else
-            call add(l:names, g:stk_sep1)
-          endif
-        endif
-        call airline#parts#define_text(key, valueStr)
-
-        let l:undefined = 0
-        if l:ix < l:countIndices
-          let l:threshold = g:stk_config["threshold"]["indices"][ix]
-          if value >= l:threshold
-            call airline#parts#define_accent(key, 'up_hl')
-          elseif value <= -l:threshold
-            call airline#parts#define_accent(key, 'down_hl')
-          else
-            let l:undefined = 1
-          endif
-        else
-          if value >= g:stk_config["threshold"]["up"]
-            call airline#parts#define_accent(key, 'up_hl')
-          elseif value <= -g:stk_config["threshold"]["down"]
-            call airline#parts#define_accent(key, 'down_hl')
-          else
-            let l:undefined = 1
-          endif
-        endif
-
-        if l:undefined
-          if value == 0
-            call airline#parts#define_accent(key, 'even')
-          elseif value > 0
-            call airline#parts#define_accent(key, 'up')
-          else
-            call airline#parts#define_accent(key, 'down')
-          endif
-        endif
-
-        let l:ix += 1
-      endfor
-      let g:airline_section_c = airline#section#create(l:names)
-      call airline#update_statusline()
-    else
-      call s:Log('Prices are empty')
+  let l:waiting = a:timer && !l:updated
+  if l:waiting
+    "echom 'waiting: ' string(l:tData) . ' ' . string(g:stk_last_read_time)"
+    if !filereadable(g:stk_runner_pid_path) || getfsize(g:stk_runner_pid_path) > 0 && !s:IsProcessRunning(readfile(g:stk_runner_pid_path)[0])
+      call s:StartRunner(0)
+      return
     endif
   else
-    call s:Log('No prices')
+    if has_key(l:data, 'prices')
+      if type(l:data['prices']) == v:t_string
+        let g:airline_section_c = "[STOCK] Error"
+        call airline#update_statusline()
+        call s:Log(l:data['prices'])
+      elseif !empty(l:data['prices'])
+        let l:countIndices = len(g:stk_config['indices'])
+        let l:ix = 0
+        let l:names = []
+        for [key, value] in l:data['prices']
+          if l:ix < l:countIndices
+            let key = string(value)
+            let valueStr = key
+          else
+            let valueStr = key . value
+          endif
+
+          call add(l:names, key)
+          if l:ix < l:countIndices
+            if l:ix == 2
+              call add(l:names, g:stk_sep2)
+            else
+              call add(l:names, g:stk_sep1)
+            endif
+          endif
+          call airline#parts#define_text(key, valueStr)
+
+          let l:undefined = 0
+          if l:ix < l:countIndices
+            let l:threshold = g:stk_config["threshold"]["indices"][ix]
+            if value >= l:threshold
+              call airline#parts#define_accent(key, 'up_hl')
+            elseif value <= -l:threshold
+              call airline#parts#define_accent(key, 'down_hl')
+            else
+              let l:undefined = 1
+            endif
+          else
+            if value >= g:stk_config["threshold"]["up"]
+              call airline#parts#define_accent(key, 'up_hl')
+            elseif value <= -g:stk_config["threshold"]["down"]
+              call airline#parts#define_accent(key, 'down_hl')
+            else
+              let l:undefined = 1
+            endif
+          endif
+
+          if l:undefined
+            if value == 0
+              call airline#parts#define_accent(key, 'even')
+            elseif value > 0
+              call airline#parts#define_accent(key, 'up')
+            else
+              call airline#parts#define_accent(key, 'down')
+            endif
+          endif
+
+          let l:ix += 1
+        endfor
+        let g:airline_section_c = airline#section#create(l:names)
+        call airline#update_statusline()
+      else
+        call s:Log('Prices are empty')
+      endif
+    else
+      call s:Log('No prices')
+    endif
   endif
 
   let l:target_days = 0
@@ -339,10 +350,10 @@ function! s:DisplayPrices(timer)
     if l:timehour < "0915"
       let l:target_hour = 9
       let l:target_minute = 15
-    elseif l:timehour > "1130" && l:timehour < "1300"
+    elseif l:timehour >= "1130" && l:timehour < "1300"
       let l:target_hour = 13
       let l:target_minute = 0
-    elseif l:timehour > "1600"
+    elseif l:timehour >= "1600"
       call s:Log('Market closed')
       let l:target_days = s:FindNextOpenDay()
     endif
@@ -372,8 +383,6 @@ function! StockRun()
     let l:needRunner = 0
     let l:timehour = strftime("%H%M")
 
-    "Always for market days, since we don't know whether the data is the latest"
-    let l:needRunner = 0
     let l:data_modified_time = getftime(g:stk_data_path)
     if getftime(g:stk_config_path) > l:data_modified_time
       let l:needRunner = 1
@@ -392,15 +401,16 @@ function! StockRun()
           if l:data_modified_time < l:today_start
             let l:needRunner = 1
           endif
-        elseif l:timehour > "1130" && l:timehour < "1300"
+        elseif l:timehour >= "1130" && l:timehour < "1300"
           if l:data_modified_time < l:today_start + 11 * 3600 + 30 * 60
             let l:needRunner = 1
           endif
-        elseif l:timehour > "1600"
+        elseif l:timehour >= "1600"
           if l:data_modified_time < l:today_start + 16 * 3600
             let l:needRunner = 1
           endif
         else
+          "Always for market days, since we don't know whether the data is the latest"
           let l:needRunner = 1
         endif
       endif
