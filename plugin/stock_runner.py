@@ -7,9 +7,12 @@ import atexit
 from datetime import datetime
 import random
 import requests
+import errno
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 from windows_toasts import Toast, WindowsToaster, ToastDisplayImage
+
+from servers import Servers
 
 folder = os.path.expanduser("~/.stock")
 configFile = f"{folder}/stock.cfg.json"
@@ -19,12 +22,10 @@ runnerFile = f"{folder}/stock.runner.pid"
 logFile = f"{folder}/stock.log"
 
 Config = {}
-Stock_codes = ''
 Rests = []
 OneObserver = None
 Notified = []
 JsonData = None
-Indices = ''
 LogFileHandle = open(logFile, 'a', encoding="utf-8")
 
 def log(msg):
@@ -52,7 +53,7 @@ def cleanup():
 atexit.register(cleanup)
 
 def readConfig():
-    global Config, Stock_codes, Rests, Indices, Notified, JsonData
+    global Config, Rests, Notified, JsonData
 
     with open(configFile, "r", encoding="utf-8") as f:
         try:
@@ -65,44 +66,46 @@ def readConfig():
         log("Indices and thresholds mismatch.")
         return
 
-    if len(Config["codes"]):
-        Stock_codes = Stock_codes[:-1]
+    codes = []
 
-    Indices = ','.join(Config['indices'])
+    if len(Config['indices']):
+        for server in Servers:
+            server['codes'] = [server['code_converter'](i, True) for i in Config['indices']]
+    else:
+        log("No indices configured.")
+        return
 
+    if len(Config['codes']):
+        for server in Servers:
+            server['codes'] += [server['code_converter'](i) for i in Config['codes']]
+            server['codes'] = ','.join(server['codes'])
+    else:
+        log("No codes configured.")
+
+    if not len(Servers[0]['codes']):
+        raise Exception("No indices and codes configured.")
+
+    Rests = Config["rest_dates"]
     Notified = []
     if JsonData: # in running
         JsonData = {'notified': []}
-
-    Rests = Config["rest_dates"]
-    for code in Config["codes"]:
-        codeInt = int(code)
-        if codeInt > 600000 and codeInt < 700000:
-            Stock_codes += "1." + code + ","
-        else:
-            Stock_codes += "0." + code + ","
 
     return True
 
 
 def retrieveStockData():
-    codes = '' if not len(Stock_codes) else ',' + Stock_codes
-    url = f"https://push2.eastmoney.com/api/qt/ulist.np/get?fltt=2&secids={Indices}{codes}&fields=f3,f14&cb=cb"
+    server = random.choice(Servers)
+    server = Servers[2]
+
+    # import pdb; pdb.set_trace()
+    url = server['url_formatter'](server['codes'])
     print(f"Retrieve stock data for: {url}")
     try:
-        rsp = requests.get(
-            url,
-            headers={"Referer": "https://guba.eastmoney.com/"},
-        )
+        rsp = requests.get(url, headers=server['headers'])
         if rsp.status_code == 200:
-            print(rsp.text)
-            data = []
-            ls = json.loads(rsp.text[3:-2])['data']['diff']
-            # import pdb; pdb.set_trace()
-            for item in ls:
-                data.append([item['f14'].replace(' ', '')[0:2], item['f3']])
+            # print(rsp.text)
+            data = server['rsp_parser'](rsp)
             # log(f"Stock data retrieved: {json.dumps(data)}")
-
             return data
         else:
             log(f"Failed to retrieve stock data, status code: {rsp.status_code}")
@@ -117,15 +120,17 @@ def checkNotify(data):
     up = False
     down = False
     for i, (name, value) in enumerate(data):
-        if i < 3:
+        if i in Notified:
+            continue
+        if type(value) is str: # '-'
+            continue
+
+        if i < len(Config['indices']):
             threshold = Config["threshold"]['indices'][i]
         elif value > 0:
             threshold = Config["threshold"]['up']
         else:
             threshold = Config["threshold"]['down']
-
-        if i in Notified:
-            continue
 
         if value  > 0 and value >= threshold:
             up = True
@@ -215,16 +220,18 @@ if os.path.exists(dataFile):
 if os.path.exists(dataLockFile): # prevent reading empty data file (still happen when waiting retrieving)
     try:
         os.remove(dataLockFile)
-    except FileNotFoundError:
-        pass  # File was already removed by another process
+    except PermissionError as e:
+        if e.errno == errno.EACCES and "used by another process" in str(e):
+            log(f"Runner sync failed.\n Error: {e}")
 
 if os.path.exists(dataFile):
     data_modified_date = datetime.fromtimestamp(os.path.getmtime(dataFile)).date()
 else:
     data_modified_date = 0
+
 with open(dataFile, 'w', encoding="utf-8") as fData:
     # log(f'Data opened')
-    time.sleep(0.1)
+    time.sleep(1) # getftime in vim returns seconds
     with open(dataLockFile, "w", encoding="utf-8") as fLock:
         if data_modified_date == datetime.now().date() and "notified" in Data:
             Notified = Data["notified"]

@@ -147,7 +147,7 @@ function! s:ReadConfig()
     return 1
   else
     call s:Log("File does not exist: " . g:stk_config_path)
-    let l:data = {"codes": [], "indices": ["1.000001", "0.399001", "0.399006", "0.899050", "1.000985", "100.HSI"], "threshold": {"indices": [2, 3, 4, 5, 2, 3], "up": 7, "down": 5}, "delay": 5, "rest_dates": []}
+    let l:data = {"codes": [], "indices": ["000001", "399001", "399006", "899050", "000985", "HSI"], "threshold": {"indices": [2, 3, 4, 5, 2, 3], "up": 7, "down": 5}, "delay": 6, "rest_dates": []}
     let l:json_content = json_encode(l:data)
     call writefile(split(l:json_content, "\n"), g:stk_config_path)
     return 0
@@ -185,7 +185,6 @@ endfunction
 
 function! s:StartRunner(check)
   "echom 'StartRunner'"
-  let l:data = s:ReadData()
   let l:failed = 0
 
   try
@@ -228,22 +227,13 @@ function! s:StartRunner(check)
     endif
   finally
       if !l:failed
-        let g:stk_timer = timer_start(2000, { -> s:WaitPrices(localtime()) })
+        let g:stk_timer = timer_start(2000, { -> s:DisplayPrices(0) })
       endif
   endtry
 endfunction
 
-function! s:WaitPrices(runner_time)
-  "echom 'WaitPrices ' . getftime(g:stk_data_path)"
-  if getftime(g:stk_data_path) >= a:runner_time
-    call s:DisplayPrices(0)
-  else
-    let g:stk_timer = timer_start(1000, { -> s:WaitPrices(a:runner_time) })
-  endif
-endfunction
-
 function! s:DisplayPrices(timer)
-  "echom 'DisplayPrices'"
+  call s:Log('DisplayPrices')
   let l:tCfg = getftime(g:stk_config_path)
   if l:tCfg > g:stk_cfg_ts
     call s:ReadConfig()
@@ -252,14 +242,14 @@ function! s:DisplayPrices(timer)
 
   let l:tData = getftime(g:stk_data_path)
   if !filereadable(g:stk_data_lock_path)
-    let l:tLock = 12345678901
+    let l:tLock = 12345678901 ":locked"
   else
     let l:tLock = getftime(g:stk_data_lock_path)
   endif
   "echom 'Lock/Data: ' . string(l:tLock) . '/' . string(l:tData)"
   if l:tLock > l:tData
     call s:Log('Data is locked')
-    let g:stk_timer = timer_start(500, 's:DisplayPrices')
+    let g:stk_timer = timer_start(1000, 's:DisplayPrices')
     return
   endif
 
@@ -267,8 +257,10 @@ function! s:DisplayPrices(timer)
   let l:data = s:ReadData()
   "Only check runner if called in market time (by schedule) & data is not updated by runner"
   let l:waiting = a:timer && !l:updated
+  "echom 'modified data/last: ' string(l:tData) . ' ' . string(g:stk_last_read_time)"
+  "echom 'a:timer: ' . string(a:timer)"
   if l:waiting
-    "echom 'waiting: ' string(l:tData) . ' ' . string(g:stk_last_read_time)"
+    echom 'waiting: ' string(l:tData) . ' ' . string(g:stk_last_read_time)
     if !filereadable(g:stk_runner_pid_path) || getfsize(g:stk_runner_pid_path) > 0 && !s:IsProcessRunning(readfile(g:stk_runner_pid_path)[0])
       call s:StartRunner(0)
       return
@@ -278,14 +270,19 @@ function! s:DisplayPrices(timer)
       if type(l:data['prices']) == v:t_string
         let g:airline_section_c = "[STOCK] Error"
         call airline#update_statusline()
-        call s:Log(l:data['prices'])
+        call s:LogErr("Runner: " . l:data['prices'])
       elseif !empty(l:data['prices'])
         let l:countIndices = len(g:stk_config['indices'])
         let l:ix = 0
         let l:names = []
+        echom '00000'
         for [key, value] in l:data['prices']
           if l:ix < l:countIndices
-            let key = string(value)
+            if type(value) == v:t_string
+              let key = value
+            else
+              let key = string(value)
+            endif
             let valueStr = key
           else
             let valueStr = key . value
@@ -303,13 +300,17 @@ function! s:DisplayPrices(timer)
 
           let l:undefined = 0
           if l:ix < l:countIndices
-            let l:threshold = g:stk_config["threshold"]["indices"][ix]
-            if value >= l:threshold
-              call airline#parts#define_accent(key, 'up_hl')
-            elseif value <= -l:threshold
-              call airline#parts#define_accent(key, 'down_hl')
+            if type(value) == v:t_string && value == '-'
+              call airline#parts#define_accent(key, 'even')
             else
-              let l:undefined = 1
+              let l:threshold = g:stk_config["threshold"]["indices"][ix]
+              if value >= l:threshold
+                call airline#parts#define_accent(key, 'up_hl')
+              elseif value <= -l:threshold
+                call airline#parts#define_accent(key, 'down_hl')
+              else
+                let l:undefined = 1
+              endif
             endif
           else
             if value >= g:stk_config["threshold"]["up"]
@@ -339,7 +340,7 @@ function! s:DisplayPrices(timer)
         call s:Log('Prices are empty')
       endif
     else
-      call s:Log('No prices')
+      call s:Log('No prices yet')
     endif
   endif
 
