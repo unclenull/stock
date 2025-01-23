@@ -134,6 +134,7 @@ function! s:ReadData()
 endfunction
 
 function! s:ReadConfig()
+  "echom 'ReadConfig'"
   if filereadable(g:stk_config_path)
     let g:stk_cfg_ts = getftime(g:stk_config_path)
 
@@ -183,6 +184,7 @@ function! s:FindNextOpenDay()
 endfunction
 
 function! s:StartRunner(check)
+  "echom 'StartRunner'"
   let l:data = s:ReadData()
   let l:failed = 0
 
