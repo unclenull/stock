@@ -95,7 +95,6 @@ def readConfig():
 
 def retrieveStockData():
     server = random.choice(Servers)
-    server = Servers[2]
 
     # import pdb; pdb.set_trace()
     url = server['url_formatter'](server['codes'])
