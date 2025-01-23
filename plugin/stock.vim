@@ -379,48 +379,50 @@ function! s:DisplayPrices(timer)
 endfunction
 
 function! StockRun()
-  if s:ReadConfig()
-    let l:needRunner = 0
-    let l:timehour = strftime("%H%M")
+  if !s:ReadConfig()
+    return
+  endif
 
-    let l:data_modified_time = getftime(g:stk_data_path)
-    if getftime(g:stk_config_path) > l:data_modified_time
-      let l:needRunner = 1
+  let l:needRunner = 0
+  let l:timehour = strftime("%H%M")
+
+  let l:data_modified_time = getftime(g:stk_data_path)
+  if getftime(g:stk_config_path) > l:data_modified_time
+    let l:needRunner = 1
+  else
+    let l:today_start = luaeval('GetMidnight()')
+    if s:InRestDay()
+      "strptime is not available on windows"
+      "Simpler way to ensure it's the latest"
+      if l:data_modified_time < l:today_start
+        "echom 'data modified time: ' . l:data_modified_time . ' today start: ' . l:today_start"
+        let l:needRunner = 1
+      endif
     else
-      let l:today_start = luaeval('GetMidnight()')
-      if s:InRestDay()
-        "strptime is not available on windows"
-        "Simpler way to ensure it's the latest"
+      let l:timehour = strftime("%H%M")
+      if l:timehour < "0915"
         if l:data_modified_time < l:today_start
-          "echom 'data modified time: ' . l:data_modified_time . ' today start: ' . l:today_start"
+          let l:needRunner = 1
+        endif
+      elseif l:timehour >= "1130" && l:timehour < "1300"
+        if l:data_modified_time < l:today_start + 11 * 3600 + 30 * 60
+          let l:needRunner = 1
+        endif
+      elseif l:timehour >= "1600"
+        if l:data_modified_time < l:today_start + 16 * 3600
           let l:needRunner = 1
         endif
       else
-        let l:timehour = strftime("%H%M")
-        if l:timehour < "0915"
-          if l:data_modified_time < l:today_start
-            let l:needRunner = 1
-          endif
-        elseif l:timehour >= "1130" && l:timehour < "1300"
-          if l:data_modified_time < l:today_start + 11 * 3600 + 30 * 60
-            let l:needRunner = 1
-          endif
-        elseif l:timehour >= "1600"
-          if l:data_modified_time < l:today_start + 16 * 3600
-            let l:needRunner = 1
-          endif
-        else
-          "Always for market days, since we don't know whether the data is the latest"
-          let l:needRunner = 1
-        endif
+        "Always for market days, since we don't know whether the data is the latest"
+        let l:needRunner = 1
       endif
     endif
+  endif
 
-    if l:needRunner
-      call s:StartRunner(1)
-    else
-      call s:DisplayPrices(0)
-    endif
+  if l:needRunner
+    call s:StartRunner(1)
+  else
+    call s:DisplayPrices(0)
   endif
 endfunction
 
