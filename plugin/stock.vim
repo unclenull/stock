@@ -16,6 +16,7 @@ let g:stk_config = {}
 let g:stk_last_read_time = 0
 let g:stk_cfg_ts = 0
 let g:stk_timer = 0
+let g:stk_names = v:null
 
 function! s:Log(msg)
   echom "[STOCK-". strftime("%m/%d %H:%M:%S") . '] ' . a:msg
@@ -233,7 +234,7 @@ function! s:StartRunner(check)
 endfunction
 
 function! s:DisplayPrices(timer)
-  call s:Log('DisplayPrices')
+  "echom 'DisplayPrices'"
   let l:tCfg = getftime(g:stk_config_path)
   if l:tCfg > g:stk_cfg_ts
     call s:ReadConfig()
@@ -260,7 +261,7 @@ function! s:DisplayPrices(timer)
   "echom 'modified data/last: ' string(l:tData) . ' ' . string(g:stk_last_read_time)"
   "echom 'a:timer: ' . string(a:timer)"
   if l:waiting
-    echom 'waiting: ' string(l:tData) . ' ' . string(g:stk_last_read_time)
+    "echom 'waiting: ' string(l:tData) . ' ' . string(g:stk_last_read_time)"
     if !filereadable(g:stk_runner_pid_path) || getfsize(g:stk_runner_pid_path) > 0 && !s:IsProcessRunning(readfile(g:stk_runner_pid_path)[0])
       call s:StartRunner(0)
       return
@@ -274,49 +275,60 @@ function! s:DisplayPrices(timer)
       elseif !empty(l:data['prices'])
         let l:countIndices = len(g:stk_config['indices'])
         let l:ix = 0
-        let l:names = []
-        echom '00000'
-        for [key, value] in l:data['prices']
+        let l:text = []
+
+        "Some server doesn't contain names"
+        if g:stk_names is v:null && l:data['prices'][0][0] != '?'
+          let g:stk_names = []
+          for item in l:data['prices']
+            call add(g:stk_names, item[0])
+          endfor
+        endif
+
+        for [name, value] in l:data['prices']
           if l:ix < l:countIndices
-            if type(value) == v:t_string
-              let key = value
+            if type(value) == v:t_string "- when non-exist"
+              let name = value
             else
-              let key = string(value)
+              let name = string(value)
             endif
-            let valueStr = key
+            let valueStr = name
           else
-            let valueStr = key . value
+            if name == '?' && g:stk_names isnot v:null
+              let name = g:stk_names[l:ix]
+            endif
+            let valueStr = name . value
           endif
 
-          call add(l:names, key)
+          call add(l:text, name)
           if l:ix < l:countIndices
             if l:ix == 2
-              call add(l:names, g:stk_sep2)
+              call add(l:text, g:stk_sep2)
             else
-              call add(l:names, g:stk_sep1)
+              call add(l:text, g:stk_sep1)
             endif
           endif
-          call airline#parts#define_text(key, valueStr)
+          call airline#parts#define_text(name, valueStr)
 
           let l:undefined = 0
           if l:ix < l:countIndices
             if type(value) == v:t_string && value == '-'
-              call airline#parts#define_accent(key, 'even')
+              call airline#parts#define_accent(name, 'even')
             else
               let l:threshold = g:stk_config["threshold"]["indices"][ix]
               if value >= l:threshold
-                call airline#parts#define_accent(key, 'up_hl')
+                call airline#parts#define_accent(name, 'up_hl')
               elseif value <= -l:threshold
-                call airline#parts#define_accent(key, 'down_hl')
+                call airline#parts#define_accent(name, 'down_hl')
               else
                 let l:undefined = 1
               endif
             endif
           else
             if value >= g:stk_config["threshold"]["up"]
-              call airline#parts#define_accent(key, 'up_hl')
+              call airline#parts#define_accent(name, 'up_hl')
             elseif value <= -g:stk_config["threshold"]["down"]
-              call airline#parts#define_accent(key, 'down_hl')
+              call airline#parts#define_accent(name, 'down_hl')
             else
               let l:undefined = 1
             endif
@@ -324,17 +336,17 @@ function! s:DisplayPrices(timer)
 
           if l:undefined
             if value == 0
-              call airline#parts#define_accent(key, 'even')
+              call airline#parts#define_accent(name, 'even')
             elseif value > 0
-              call airline#parts#define_accent(key, 'up')
+              call airline#parts#define_accent(name, 'up')
             else
-              call airline#parts#define_accent(key, 'down')
+              call airline#parts#define_accent(name, 'down')
             endif
           endif
 
           let l:ix += 1
         endfor
-        let g:airline_section_c = airline#section#create(l:names)
+        let g:airline_section_c = airline#section#create(l:text)
         call airline#update_statusline()
       else
         call s:Log('Prices are empty')

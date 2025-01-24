@@ -7,6 +7,7 @@ import atexit
 from datetime import datetime
 import random
 import requests
+from requests.exceptions import Timeout
 import errno
 from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
@@ -44,13 +45,10 @@ def global_exception_handler(exctype, value, tb):
 
     sys.__excepthook__(exctype, value, tb)
 
-sys.excepthook = global_exception_handler
 
 def cleanup():
     LogFileHandle.close()
     os.remove(runnerFile)
-
-atexit.register(cleanup)
 
 def readConfig():
     global Config, Rests, Notified, JsonData
@@ -78,7 +76,7 @@ def readConfig():
     if len(Config['codes']):
         for server in Servers:
             server['codes'] += [server['code_converter'](i) for i in Config['codes']]
-            server['codes'] = ','.join(server['codes'])
+            server['codes_str'] = ','.join(server['codes'])
     else:
         log("No codes configured.")
 
@@ -95,24 +93,32 @@ def readConfig():
 
 def retrieveStockData():
     server = random.choice(Servers)
+    # server = Servers[3]
 
     # import pdb; pdb.set_trace()
-    url = server['url_formatter'](server['codes'])
-    print(f"Retrieve stock data for: {url}")
+    url = server['url_formatter'](server['codes_str'])
+    log(f"Retrieve from: {url}")
     try:
-        rsp = requests.get(url, headers=server['headers'])
+        rsp = requests.get(
+            url,
+            timeout=Config['delay'],
+            headers={**server['headers'], "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
+        )
         if rsp.status_code == 200:
-            # print(rsp.text)
-            data = server['rsp_parser'](rsp)
-            # log(f"Stock data retrieved: {json.dumps(data)}")
+            # log(rsp.text)
+            data = server['rsp_parser'](rsp, server)
+            # log(f"Parsed: {json.dumps(data)}")
             return data
         else:
-            log(f"Failed to retrieve stock data, status code: {rsp.status_code}")
+            log(f"Failed to retrieve from ({url}): {rsp.status_code}")
             return str(rsp.status_code)
+    except Timeout:
+        log(f"Request to {url} timed out.")
+        return "Timeout"
     except Exception as er:
         # import pdb; pdb.set_trace()
-        log(f"Failed to retrieve stock data: {er}")
-        return str(er)
+        log(f"Failed to retrieve from {url}: {repr(er)}")
+        return repr(er)
 
 def checkNotify(data):
     txts = []
@@ -179,6 +185,14 @@ log(f"Stock runner ({os.getpid()}) starting")
 
 if not readConfig():
     exit(1)
+
+if len(sys.argv) > 1:
+    log = print
+    retrieveStockData()
+    exit(0)
+
+sys.excepthook = global_exception_handler
+atexit.register(cleanup)
 
 if inRest():
     if os.path.exists(dataFile):
