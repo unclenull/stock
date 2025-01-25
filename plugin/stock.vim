@@ -443,7 +443,7 @@ endfunction
 
 function! StockUpdate()
   if g:stk_timer
-    timer_stop(g:stk_timer)
+    call timer_stop(g:stk_timer)
     let g:stk_timer = 0
   endif
   call StockRun()
@@ -455,4 +455,4 @@ endfunction
 
 autocmd VimEnter * call StockRun()
 autocmd VimLeave * call StockClean()
-nnoremap <Leader>ss :call StockUpdate()
+nnoremap <Leader>ss :call StockUpdate()<Enter>

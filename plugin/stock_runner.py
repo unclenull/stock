@@ -175,6 +175,14 @@ def inRest():
     key = today.strftime("%Y-%m-%d")
     return weekday > 5 or key in Rests
 
+def delDataLockFile():
+    if os.path.exists(dataLockFile):
+        try:
+            os.remove(dataLockFile)
+        except PermissionError as e:
+            if e.errno == errno.EACCES and "used by another process" in str(e):
+                log(f"Runner sync failed.\n Error: {e}")
+
 class ConfigFileEventHandler(PatternMatchingEventHandler):
     def __init__(self):
         super().__init__(patterns=[configFile])
@@ -199,14 +207,13 @@ if inRest():
         tsData = os.path.getmtime(dataFile)
     else:
         tsData = 0
+
     # if os.path.getmtime(configFile) > tsData or \
     # log(datetime.fromtimestamp(tsData).strftime('%m-%d') + ' ' + datetime.now().strftime('%m-%d'))
     if datetime.fromtimestamp(tsData).date() != datetime.now().date():
-        with open(dataFile, 'w', encoding="utf-8") as fData, open(dataLockFile, "w", encoding="utf-8") as fLock:
-            fLock.write(' ')
-            fLock.flush()
-
-            data = {'prices': retrieveStockData()}
+        delDataLockFile()
+        data = {'prices': retrieveStockData()}
+        with open(dataLockFile, "w", encoding="utf-8") as fLock, open(dataFile, 'w', encoding="utf-8") as fData:
             fData.write(json.dumps(data))
             # log("Data updated.")
     log("Rest day, exit.")
@@ -229,18 +236,11 @@ if os.path.exists(dataFile):
         dataStr = fData.read()
         if dataStr:
             Data = json.loads(dataStr)
-
-if os.path.exists(dataLockFile): # prevent reading empty data file (still happen when waiting retrieving)
-    try:
-        os.remove(dataLockFile)
-    except PermissionError as e:
-        if e.errno == errno.EACCES and "used by another process" in str(e):
-            log(f"Runner sync failed.\n Error: {e}")
-
-if os.path.exists(dataFile):
     data_modified_date = datetime.fromtimestamp(os.path.getmtime(dataFile)).date()
 else:
     data_modified_date = 0
+
+delDataLockFile()
 
 with open(dataFile, 'w', encoding="utf-8") as fData:
     # log(f'Data opened')
