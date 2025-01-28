@@ -164,7 +164,7 @@ function! s:InRestDay(...)
   let l:date = strftime("%Y-%m-%d", l:timestamp)
 
   if !(str2nr(strftime("%w", l:timestamp)) % 6) || index(g:stk_config['rest_dates'], l:date) > -1
-    call s:Log((a:0 == 0 ? 'Today' : l:date) . ' is a rest day')
+    "call s:Log((a:0 == 0 ? 'Today' : l:date) . ' is a rest day')"
     return 1
   else
     return 0
