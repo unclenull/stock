@@ -17,6 +17,7 @@ let g:stk_last_read_time = 0
 let g:stk_cfg_ts = 0
 let g:stk_timer = 0
 let g:stk_names = v:null
+let g:stk_output = ''
 
 function! s:Log(msg)
   echom "[STOCK-". strftime("%m/%d %H:%M:%S") . '] ' . a:msg
@@ -268,7 +269,7 @@ function! s:DisplayPrices(timer)
   else
     if has_key(l:data, 'prices')
       if type(l:data['prices']) == v:t_string
-        let g:airline_section_c = "[STOCK] Error"
+        let g:stk_output = "[STOCK] Error"
         call airline#update_statusline()
         call s:LogErr("Runner: " . l:data['prices'])
       elseif !empty(l:data['prices'])
@@ -345,7 +346,7 @@ function! s:DisplayPrices(timer)
 
           let l:ix += 1
         endfor
-        let g:airline_section_c = airline#section#create(l:text)
+        let g:airline_section_c = substitute(airline#section#create(l:text), 'airline#util#wrap', 'StkCheckWin', 'g')
         call airline#update_statusline()
       else
         call s:Log('Prices are empty')
@@ -451,6 +452,11 @@ endfunction
 function! StockClean()
   lua CloseDataInner()
 endfunction
+
+function! StkCheckWin(str, _)
+  return winnr() == 1 ? a:str : ''
+endfunction
+
 
 autocmd VimEnter * call StockRun()
 autocmd VimLeave * call StockClean()
