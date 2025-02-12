@@ -294,10 +294,17 @@ function! s:DisplayPrices(timer)
             endif
             let valueStr = name
           else
-            if name == '?' && g:stk_names isnot v:null
-              let name = g:stk_names[l:ix]
+            if name == '?'
+              if g:stk_names isnot v:null
+                let name = g:stk_names[l:ix]
+                let valueStr = name . value
+              else
+                let valueStr = name . value
+                let name = valueStr
+              endif
+            else
+              let valueStr = name . value
             endif
-            let valueStr = name . value
           endif
 
           call add(l:text, name)
