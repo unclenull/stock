@@ -28,6 +28,7 @@ OneObserver = None
 Notified = []
 JsonData = None
 LogFileHandle = open(logFile, 'a', encoding="utf-8")
+FirstRun = True
 
 def log(msg):
     LogFileHandle.write(f"{datetime.now().strftime('%m-%d %H:%M:%S')}({time.time()}): {msg}\n")
@@ -64,8 +65,6 @@ def readConfig():
         log("Indices and thresholds mismatch.")
         return
 
-    codes = []
-
     if len(Config['indices']):
         for server in Servers:
             server['codes'] = [server['code_converter'](i, True) for i in Config['indices']]
@@ -92,32 +91,40 @@ def readConfig():
 
 
 def retrieveStockData():
-    server = random.choice(Servers)
-    # server = Servers[3]
+    if FirstRun:
+        server = Servers[0] # The first one returns full data
+    else:
+        server = random.choice(Servers)
 
     # import pdb; pdb.set_trace()
     url = server['url_formatter'](server['codes_str'])
-    log(f"Retrieve from: {url}")
+    # log(f"Retrieve from: {url}")
     try:
         rsp = requests.get(
             url,
             timeout=Config['delay'],
             headers={**server['headers'], "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
         )
-        if rsp.status_code == 200:
+        if rsp.status_code != 200:
             # log(rsp.text)
-            data = server['rsp_parser'](rsp, server)
-            # log(f"Parsed: {json.dumps(data)}")
-            return data
-        else:
             log(f"Failed to retrieve from ({url}): {rsp.status_code}")
             return str(rsp.status_code)
     except Timeout:
-        log(f"Request to {url} timed out.")
-        return "Timeout"
+        msg = f"Request to {url} timed out."
+        log(msg)
+        return msg
     except Exception as er:
         # import pdb; pdb.set_trace()
         log(f"Failed to retrieve from {url}: {repr(er)}")
+        return repr(er)
+
+    try:
+        data = server['rsp_parser'](rsp, server)
+        # log(f"Parsed: {json.dumps(data)}")
+        return data
+    except Exception as er:
+        # import pdb; pdb.set_trace()
+        log(f"Failed to parse response from {url}: {repr(er)}")
         return repr(er)
 
 def checkNotify(data):
@@ -196,7 +203,7 @@ if not readConfig():
 
 if len(sys.argv) > 1:
     log = print
-    retrieveStockData()
+    print(retrieveStockData())
     exit(0)
 
 sys.excepthook = global_exception_handler

@@ -189,4 +189,51 @@ xq = {
     'rsp_parser': _xq_rsp_parser
 }
 
-Servers = (sina, east, qq, xq)
+
+def _cls_code_converter(code, isIndex=False):
+    if isIndex:
+        if not code.isdigit():
+            defs = {
+                "HSI": 'HK'
+            }
+            if code in defs:
+                return f"{defs[code]}{code}"
+            else:
+                raise Exception(f"Unknown code: {code}")
+        else:
+            if code.startswith('000'):
+                return "sh" + code
+            elif code.startswith('399'):
+                return "sz" + code
+            else:
+                return code + ".BJ"
+
+    codeInt = int(code)
+    if codeInt < 600000:
+        return "sz" + code
+    elif codeInt < 800000:
+        return "sh" + code
+    else:
+        return code + ".BJ"
+
+def _cls_rsp_parser(rsp, server):
+    data = []
+    dc = json.loads(rsp.text)['data']
+    # print(ls)
+    # import pdb; pdb.set_trace()
+    for code in server['codes']:
+        if code in dc:
+            data.append(['?', round(dc[code] * 100, 2)])
+        else:
+            data.append(['?', '-'])
+    return data
+
+cls = {
+    'url_formatter': lambda codes: f"https://x-quote.cls.cn/quote/stock/refresh?secu_codes={codes}&app=CailianpressWeb&os=web&sv=8.4.6&sign=9f8797a1f4de66c2370f7a03990d2737",
+    'headers': {"Referer": "https://www.cls.cn/"},
+    'code_converter': _cls_code_converter,
+    'rsp_parser': _cls_rsp_parser
+}
+
+
+Servers = (qq, sina, east, xq, cls)
