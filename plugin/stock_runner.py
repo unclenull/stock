@@ -91,8 +91,9 @@ def readConfig():
 
 
 def retrieveStockData():
+    global FirstRun
     if FirstRun:
-        FirstRun = False:
+        FirstRun = False
         server = Servers[0] # The first one returns full data
     else:
         server = random.choice(Servers)
