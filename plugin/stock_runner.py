@@ -83,9 +83,8 @@ def readConfig():
         raise Exception("No indices and codes configured.")
 
     Rests = Config["rest_dates"]
-    Notified = []
-    if JsonData: # in running
-        JsonData = {'notified': []}
+    if JsonData: # Config changed on the fly
+        Notified.clear()
 
     return True
 
@@ -255,7 +254,7 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
     # log(f'Data opened')
     time.sleep(1) # getftime in vim returns seconds
     with open(dataLockFile, "w", encoding="utf-8") as fLock:
-        if data_modified_date == datetime.now().date() and "notified" in Data:
+        if data_modified_date == datetime.now().date():
             Notified = Data["notified"]
         JsonData = {'notified': Notified}
         while True:
@@ -269,6 +268,11 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
             # log(f"1 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%H:%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%H:%M:%S')}")
 
             fData.seek(0)
+            # import pdb; pdb.set_trace()
+            # text = json.dumps(JsonData)
+            # log(f"Data modified: {text}")
+            # fData.write(text)
+
             fData.write(json.dumps(JsonData))
             fData.truncate()
             fData.flush()
