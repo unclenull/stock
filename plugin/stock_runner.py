@@ -29,6 +29,7 @@ Notified = []
 JsonData = None
 LogFileHandle = open(logFile, 'a', encoding="utf-8")
 FirstRun = True
+Server = None
 
 def log(msg):
     LogFileHandle.write(f"{datetime.now().strftime('%m-%d %H:%M:%S')}({time.time()}): {msg}\n")
@@ -37,6 +38,8 @@ def log(msg):
 def global_exception_handler(exctype, value, tb):
     # import pdb; pdb.set_trace()
     error = traceback.format_exception(exctype, value, tb)
+    if Server:
+        error = f'<{Server.headers.Referer}>\n{error}'
     log(error)
     if exctype != KeyboardInterrupt:
         toast(error)
@@ -90,21 +93,21 @@ def readConfig():
 
 
 def retrieveStockData():
-    global FirstRun
+    global FirstRun, Server
     if FirstRun:
         FirstRun = False
-        server = Servers[0] # The first one returns full data
+        Server = Servers[0] # The first one returns full data
     else:
-        server = random.choice(Servers)
+        Server = random.choice(Servers)
 
     # import pdb; pdb.set_trace()
-    url = server['url_formatter'](server['codes_str'])
+    url = Server['url_formatter'](Server['codes_str'])
     # log(f"Retrieve from: {url}")
     try:
         rsp = requests.get(
             url,
             timeout=Config['delay'],
-            headers={**server['headers'], "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
+            headers={**Server['headers'], "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
         )
         if rsp.status_code != 200:
             # log(rsp.text)
@@ -120,7 +123,7 @@ def retrieveStockData():
         return repr(er)
 
     try:
-        data = server['rsp_parser'](rsp, server)
+        data = Server['rsp_parser'](rsp, Server)
         # log(f"Parsed: {json.dumps(data)}")
         return data
     except Exception as er:
@@ -145,7 +148,7 @@ def checkNotify(data):
         else:
             threshold = Config["threshold"]['down']
 
-        if value  > 0 and value >= threshold:
+        if value > 0 and value >= threshold:
             up = True
             txts.append(f"{name}: {value}")
             Notified.append(i)
