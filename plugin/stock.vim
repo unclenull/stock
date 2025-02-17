@@ -464,6 +464,10 @@ function! StkCheckWin(str, _)
   return winnr() == 1 ? a:str : ''
 endfunction
 
+function! StockPrices()
+  call s:Log(system("python " . g:stk_runner_path . ' price'))
+endfunction
+
 
 autocmd VimEnter * call StockRun()
 autocmd VimLeave * call StockClean()

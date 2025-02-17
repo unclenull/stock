@@ -92,13 +92,18 @@ def readConfig():
     return True
 
 
-def retrieveStockData():
+def retrieveStockData(number=False):
     global FirstRun, Server
     if FirstRun:
         FirstRun = False
         Server = Servers[0] # The first one returns full data
     else:
-        Server = random.choice(Servers)
+        if number:
+            servers = [item for item in Servers if item['has_price']]  # Custom condition
+        else:
+            servers = Servers
+        Server = random.choice(servers)
+        # Server = Servers[4]
 
     # import pdb; pdb.set_trace()
     url = Server['url_formatter'](Server['codes_str'])
@@ -109,8 +114,8 @@ def retrieveStockData():
             timeout=Config['delay'],
             headers={**Server['headers'], "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
         )
+        # log(rsp.text)
         if rsp.status_code != 200:
-            # log(rsp.text)
             log(f"Failed to retrieve from ({url}): {rsp.status_code}")
             return str(rsp.status_code)
     except Timeout:
@@ -123,7 +128,7 @@ def retrieveStockData():
         return repr(er)
 
     try:
-        data = Server['rsp_parser'](rsp, Server)
+        data = Server['rsp_parser'](rsp, Server, number)
         # log(f"Parsed: {json.dumps(data)}")
         return data
     except Exception as er:
@@ -206,8 +211,9 @@ if not readConfig():
     exit(1)
 
 if len(sys.argv) > 1:
+    FirstRun = False
     log = print
-    print(retrieveStockData())
+    print(retrieveStockData(sys.argv[1] == 'price'))
     exit(0)
 
 sys.excepthook = global_exception_handler
