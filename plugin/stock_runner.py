@@ -1,4 +1,5 @@
 import os
+import io
 import sys
 import json
 import time
@@ -14,6 +15,8 @@ from watchdog.events import PatternMatchingEventHandler
 from windows_toasts import Toast, WindowsToaster, ToastDisplayImage
 
 from servers import Servers
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 folder = os.path.expanduser("~/.stock")
 configFile = f"{folder}/stock.cfg.json"
@@ -123,12 +126,12 @@ def retrieveStockData(number=False):
         log(msg)
         return msg
     except Exception as er:
-        # import pdb; pdb.set_trace()
         log(f"Failed to retrieve from {url}: {repr(er)}")
         return repr(er)
 
     try:
         data = Server['rsp_parser'](rsp, Server, number)
+        # import pdb; pdb.set_trace()
         # log(f"Parsed: {json.dumps(data)}")
         return data
     except Exception as er:
@@ -231,7 +234,7 @@ if inRest():
         delDataLockFile()
         data = {'prices': retrieveStockData()}
         with open(dataLockFile, "w", encoding="utf-8") as fLock, open(dataFile, 'w', encoding="utf-8") as fData:
-            fData.write(json.dumps(data))
+            fData.write(json.dumps(data), ensure_ascii=False)
             # log("Data updated.")
     log("Rest day, exit.")
     sys.exit(0)
@@ -282,7 +285,7 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
             # log(f"Data modified: {text}")
             # fData.write(text)
 
-            fData.write(json.dumps(JsonData))
+            fData.write(json.dumps(JsonData, ensure_ascii=False))
             fData.truncate()
             fData.flush()
             # log(f"Data modified: {os.path.getmtime(dataFile)}")

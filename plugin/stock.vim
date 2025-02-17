@@ -465,10 +465,11 @@ function! StkCheckWin(str, _)
 endfunction
 
 function! StockPrices()
-  call s:Log(system("python " . g:stk_runner_path . ' price'))
+  call s:Log(system("python " . g:stk_runner_path . ' price')[:-2])
 endfunction
 
 
 autocmd VimEnter * call StockRun()
 autocmd VimLeave * call StockClean()
-nnoremap <Leader>ss :call StockUpdate()<Enter>
+nnoremap <Leader>su :call StockUpdate()<Enter>
+nnoremap <Leader>sp :call StockPrices()<Enter>
