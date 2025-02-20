@@ -240,4 +240,4 @@ cls = {
 }
 
 
-Servers = (qq, sina, east, xq, cls)
+Servers = (east, qq, sina, xq, cls)
