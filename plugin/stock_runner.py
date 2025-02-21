@@ -33,6 +33,7 @@ JsonData = None
 LogFileHandle = open(logFile, 'a', encoding="utf-8")
 FirstRun = True
 Server = None
+Names = None
 
 def log(msg):
     LogFileHandle.write(f"{datetime.now().strftime('%m-%d %H:%M:%S')}({time.time()}): {msg}\n")
@@ -156,6 +157,8 @@ def checkNotify(data):
         else:
             threshold = Config["threshold"]['down']
 
+        if name == '?':
+            name = Names[i]
         if value > 0 and value >= threshold:
             up = True
             txts.append(f"{name}: {value}")
@@ -272,6 +275,8 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
         while True:
             data = retrieveStockData()
             if type(data) is list:
+                if Names is None:
+                    Names = [n for (n, _) in data]
                 checkNotify(data)
             JsonData['prices'] = data
 

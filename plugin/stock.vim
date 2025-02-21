@@ -277,7 +277,7 @@ function! s:DisplayPrices(timer)
         let l:ix = 0
         let l:text = []
 
-        "Some server doesn't contain names"
+        "Some servers don't contain names"
         if g:stk_names is v:null && l:data['prices'][0][0] != '?'
           let g:stk_names = []
           for item in l:data['prices']
