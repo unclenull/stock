@@ -16,7 +16,6 @@ let g:stk_config = {}
 let g:stk_last_read_time = 0
 let g:stk_cfg_ts = 0
 let g:stk_timer = 0
-let g:stk_names = v:null
 let g:stk_output = ''
 
 function! s:Log(msg)
@@ -67,6 +66,24 @@ if pid > 0:
         pass
 EOF
   return l:running
+endfunction
+
+function! s:CheckRunner()
+  if filereadable(g:stk_runner_pid_path)
+    if getfsize(g:stk_runner_pid_path) > 0
+      let l:pid = readfile(g:stk_runner_pid_path)[0]
+      "echom 'pid: ' . l:pid"
+      if s:IsProcessRunning(l:pid)
+        call s:Log("Runner is already running")
+        return 1
+      endif
+    else
+      call s:Log("Runner is starting by another instance")
+      return 1
+    endif
+  endif
+
+  return 0
 endfunction
 
 lua << EOF
@@ -189,18 +206,8 @@ function! s:StartRunner(check)
   let l:failed = 0
 
   try
-    if a:check && filereadable(g:stk_runner_pid_path)
-      if getfsize(g:stk_runner_pid_path) > 0
-        let l:pid = readfile(g:stk_runner_pid_path)[0]
-        "echom 'pid: ' . l:pid"
-        if s:IsProcessRunning(l:pid)
-          call s:Log("Runner is already running")
-          throw ''
-        endif
-      else
-        call s:Log("Runner is starting by another instance")
-        throw ''
-      endif
+    if a:check && s:CheckRunner()
+      throw ''
     endif
 
     call writefile([""], g:stk_runner_pid_path)
@@ -228,9 +235,19 @@ function! s:StartRunner(check)
     endif
   finally
       if !l:failed
-        let g:stk_timer = timer_start(2000, { -> s:DisplayPrices(0) })
+        let g:stk_timer = timer_start(2000, { -> s:WaitDisplay(0) })
       endif
   endtry
+endfunction
+
+function! s:WaitDisplay(timer)
+  "echom 'WaitDisplay'"
+  if getftime(g:stk_data_path) > g:stk_last_read_time
+    call s:DisplayPrices(0) 
+  else
+    call s:Log('Update is pending')
+    let g:stk_timer = timer_start(1000, 's:WaitDisplay')
+  endif
 endfunction
 
 function! s:DisplayPrices(timer)
@@ -262,13 +279,10 @@ function! s:DisplayPrices(timer)
   "echom 'a:timer: ' . string(a:timer)"
   if l:waiting
     "echom 'waiting: ' string(l:tData) . ' ' . string(g:stk_last_read_time)"
-    if !filereadable(g:stk_runner_pid_path) || getfsize(g:stk_runner_pid_path) > 0 && !s:IsProcessRunning(readfile(g:stk_runner_pid_path)[0])
+    if !s:CheckRunner()
       call s:StartRunner(0)
       return
     endif
-    call s:Log('Update is pending')
-    let g:stk_timer = timer_start(1000, 's:DisplayPrices')
-    return
   else
     if has_key(l:data, 'prices')
       if type(l:data['prices']) == v:t_string
@@ -280,14 +294,6 @@ function! s:DisplayPrices(timer)
         let l:ix = 0
         let l:text = []
 
-        "Some servers don't contain names"
-        if g:stk_names is v:null && l:data['prices'][0][0] != '?'
-          let g:stk_names = []
-          for item in l:data['prices']
-            call add(g:stk_names, item[0])
-          endfor
-        endif
-
         for [name, value] in l:data['prices']
           if l:ix < l:countIndices
             if type(value) == v:t_string "- when non-exist"
@@ -297,17 +303,7 @@ function! s:DisplayPrices(timer)
             endif
             let valueStr = name
           else
-            if name == '?'
-              if g:stk_names isnot v:null
-                let name = g:stk_names[l:ix]
-                let valueStr = name . value
-              else
-                let valueStr = name . value
-                let name = valueStr
-              endif
-            else
-              let valueStr = name . value
-            endif
+            let valueStr = name . value
           endif
 
           call add(l:text, name)
@@ -439,8 +435,8 @@ function! StockRun()
           let l:needRunner = 1
         endif
       else
-        "Always for market days, since we don't know whether the data is the latest"
-        let l:needRunner = 1
+        "Trading time"
+        let l:needRunner = !s:CheckRunner()
       endif
     endif
   endif

@@ -2,6 +2,7 @@ from datetime import datetime
 import json
 import random
 
+NAME_PLACEHOLDER = '?'
 
 def _qq_code_converter(code, isIndex=False):
     if isIndex:
@@ -181,7 +182,7 @@ def _xq_rsp_parser(rsp, server, number):
     for item in ls:
         dataDict[item['symbol']] = item['current' if number else 'percent']
     for code in server['codes']:
-        data.append(['?', dataDict[code]])
+        data.append([NAME_PLACEHOLDER, dataDict[code]])
     return data
 
 xq = {
@@ -226,9 +227,9 @@ def _cls_rsp_parser(rsp, server, _):
     # import pdb; pdb.set_trace()
     for code in server['codes']:
         if code in dc:
-            data.append(['?', round(dc[code] * 100, 2)])
+            data.append([NAME_PLACEHOLDER, round(dc[code] * 100, 2)])
         else:
-            data.append(['?', '-'])
+            data.append([NAME_PLACEHOLDER, '-'])
     return data
 
 cls = {

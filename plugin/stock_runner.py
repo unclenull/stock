@@ -14,7 +14,7 @@ from watchdog.observers import Observer
 from watchdog.events import PatternMatchingEventHandler
 from windows_toasts import Toast, WindowsToaster, ToastDisplayImage
 
-from servers import Servers
+from servers import Servers, NAME_PLACEHOLDER
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
@@ -157,8 +157,6 @@ def checkNotify(data):
         else:
             threshold = Config["threshold"]['down']
 
-        if name == '?':
-            name = Names[i]
         if value > 0 and value >= threshold:
             up = True
             txts.append(f"{name}: {value}")
@@ -277,7 +275,12 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
             if type(data) is list:
                 if Names is None:
                     Names = [n for (n, _) in data]
+                elif data[0][0] == NAME_PLACEHOLDER:
+                    for i, (name, value) in enumerate(data):
+                        data[i][0] = Names[i]
+                
                 checkNotify(data)
+
             JsonData['prices'] = data
 
             fLock.write(' ')
