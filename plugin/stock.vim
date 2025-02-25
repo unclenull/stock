@@ -266,6 +266,9 @@ function! s:DisplayPrices(timer)
       call s:StartRunner(0)
       return
     endif
+    call s:Log('Update is pending')
+    let g:stk_timer = timer_start(1000, 's:DisplayPrices')
+    return
   else
     if has_key(l:data, 'prices')
       if type(l:data['prices']) == v:t_string
@@ -409,6 +412,7 @@ function! StockRun()
   let l:timehour = strftime("%H%M")
 
   let l:data_modified_time = getftime(g:stk_data_path)
+  let g:stk_last_read_time = localtime()
   if getftime(g:stk_config_path) > l:data_modified_time
     let l:needRunner = 1
   else
