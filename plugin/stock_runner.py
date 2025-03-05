@@ -11,7 +11,7 @@ import requests
 from requests.exceptions import Timeout
 import errno
 from watchdog.observers import Observer
-from watchdog.events import PatternMatchingEventHandler
+from watchdog.events import FileSystemEventHandler
 from windows_toasts import Toast, WindowsToaster, ToastDisplayImage
 
 from servers import Servers, NAME_PLACEHOLDER
@@ -19,31 +19,36 @@ from servers import Servers, NAME_PLACEHOLDER
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 folder = os.path.expanduser("~/.stock")
-configFile = f"{folder}/stock.cfg.json"
+configFolder = f"{folder}/cfg" # can not monitor a single file
+configFileName = "stock.cfg.json"
+configFile = f"{configFolder}/{configFileName}"
 dataFile = f"{folder}/stock.dat.json"
 dataLockFile = f"{folder}/stock.dat.lock"
 runnerFile = f"{folder}/stock.runner.pid"
 logFile = f"{folder}/stock.log"
 
+LogFileHandle = open(logFile, 'a', encoding="utf-8")
+Pid = os.getpid()
+
+Cfg_reading = False
 Config = {}
 Rests = []
 OneObserver = None
 Notified = []
 JsonData = None
-LogFileHandle = open(logFile, 'a', encoding="utf-8")
 FirstRun = True
 Server = None
 Names = None
 
 def log(msg):
-    LogFileHandle.write(f"{datetime.now().strftime('%m-%d %H:%M:%S')}({time.time()}): {msg}\n")
+    LogFileHandle.write(f"{datetime.now().strftime('%m-%d %H:%M:%S')}({time.time()})[{Pid}]: {msg}\n")
     LogFileHandle.flush()
 
 def global_exception_handler(exctype, value, tb):
     # import pdb; pdb.set_trace()
     error = traceback.format_exception(exctype, value, tb)
     if Server:
-        error = f'<{Server.headers.Referer}>\n{error}'
+        error = f'<{Server['headers']['Referer']}>\n{error}'
     log(error)
     if exctype != KeyboardInterrupt:
         toast(error)
@@ -59,7 +64,8 @@ def cleanup():
     os.remove(runnerFile)
 
 def readConfig():
-    global Config, Rests, Notified, JsonData
+    global Cfg_reading, Config, Rests, Notified, JsonData
+    Cfg_reading = True
 
     with open(configFile, "r", encoding="utf-8") as f:
         try:
@@ -91,8 +97,11 @@ def readConfig():
 
     Rests = Config["rest_dates"]
     if JsonData: # Config changed on the fly
+        FirstRun = True
+        Names = None
         Notified.clear()
 
+    Cfg_reading = False
     return True
 
 
@@ -107,7 +116,7 @@ def retrieveStockData(number=False):
         else:
             servers = Servers
         Server = random.choice(servers)
-        # Server = Servers[4]
+    # Server = Servers[3]
 
     # import pdb; pdb.set_trace()
     url = Server['url_formatter'](Server['codes_str'])
@@ -145,6 +154,13 @@ def checkNotify(data):
     up = False
     down = False
     for i, (name, value) in enumerate(data):
+        if value is None: # ???????
+            url = Server['url_formatter'](Server['codes_str'])
+            error = f'{name} has no value:\n{url}\n{str(data)}'
+            error = f'<{Server['headers']['Referer']}>\n{error}'
+            toast(error)
+            log(error)
+            continue
         if i in Notified:
             continue
         if type(value) is str: # '-'
@@ -160,10 +176,12 @@ def checkNotify(data):
         if value > 0 and value >= threshold:
             up = True
             txts.append(f"{name}: {value}")
+            log("Notified: " + str(Notified))
             Notified.append(i)
         elif value <= 0 and value <= -threshold:
             down = True
             txts.append(f"{name}: {value}")
+            log("Notified: " + str(Notified))
             Notified.append(i)
 
     if len(txts):
@@ -203,13 +221,21 @@ def delDataLockFile():
             if e.errno == errno.EACCES and "used by another process" in str(e):
                 log(f"Runner sync failed.\n Error: {e}")
 
-class ConfigFileEventHandler(PatternMatchingEventHandler):
-    def __init__(self):
-        super().__init__(patterns=[configFile])
-    def on_modified(self, event):
-        readConfig()
+class ConfigFileEventHandler(FileSystemEventHandler):
+    def __init__(self, debounce_time=1.0):
+        self.debounce_time = debounce_time
+        self.last_triggered = 0
 
-log(f"Stock runner ({os.getpid()}) starting")
+    def on_modified(self, event):
+        if not event.src_path.endswith(configFileName):
+            return
+        current_time = time.time()
+        if current_time - self.last_triggered > self.debounce_time:
+            self.last_triggered = current_time
+            log('cfg updated')
+            readConfig()
+
+log(f"Stock runner starting")
 
 if not readConfig():
     exit(1)
@@ -235,14 +261,14 @@ if inRest():
         delDataLockFile()
         data = {'prices': retrieveStockData()}
         with open(dataLockFile, "w", encoding="utf-8") as fLock, open(dataFile, 'w', encoding="utf-8") as fData:
-            fData.write(json.dumps(data), ensure_ascii=False)
+            fData.write(json.dumps(data, ensure_ascii=False))
             # log("Data updated.")
     log("Rest day, exit.")
     sys.exit(0)
 
 event_handler = ConfigFileEventHandler()
 OneObserver = Observer()
-OneObserver.schedule(event_handler, os.path.dirname(configFile), recursive=False)
+OneObserver.schedule(event_handler, configFolder, recursive=False)
 OneObserver.start()
 
 
@@ -267,10 +293,13 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
     # log(f'Data opened')
     time.sleep(1) # getftime in vim returns seconds
     with open(dataLockFile, "w", encoding="utf-8") as fLock:
-        if data_modified_date == datetime.now().date():
+        if data_modified_date == datetime.now().date() and "notified" in Data:
             Notified = Data["notified"]
         JsonData = {'notified': Notified}
         while True:
+            if Cfg_reading:
+                time.sleep(1)
+                continue
             data = retrieveStockData()
             if type(data) is list:
                 if Names is None:
