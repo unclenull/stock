@@ -10,8 +10,6 @@ import random
 import requests
 from requests.exceptions import Timeout
 import errno
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 from windows_toasts import Toast, WindowsToaster, ToastDisplayImage
 
 from servers import Servers, NAME_PLACEHOLDER
@@ -19,9 +17,7 @@ from servers import Servers, NAME_PLACEHOLDER
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 folder = os.path.expanduser("~/.stock")
-configFolder = f"{folder}/cfg" # can not monitor a single file
-configFileName = "stock.cfg.json"
-configFile = f"{configFolder}/{configFileName}"
+configFile = f"{folder}/cfg/stock.cfg.json"
 dataFile = f"{folder}/stock.dat.json"
 dataLockFile = f"{folder}/stock.dat.lock"
 runnerFile = f"{folder}/stock.runner.pid"
@@ -31,6 +27,7 @@ LogFileHandle = open(logFile, 'a', encoding="utf-8")
 Pid = os.getpid()
 
 Cfg_reading = False
+Cfg_ts = None
 Config = {}
 Rests = []
 OneObserver = None
@@ -64,7 +61,7 @@ def cleanup():
     os.remove(runnerFile)
 
 def readConfig():
-    global Cfg_reading, Config, Rests, Notified, JsonData
+    global Cfg_reading, Cfg_ts, Config, Rests, Notified, JsonData
     Cfg_reading = True
 
     with open(configFile, "r", encoding="utf-8") as f:
@@ -101,6 +98,7 @@ def readConfig():
         Names = None
         Notified.clear()
 
+    Cfg_ts = os.path.getmtime(configFile)
     Cfg_reading = False
     return True
 
@@ -221,20 +219,6 @@ def delDataLockFile():
             if e.errno == errno.EACCES and "used by another process" in str(e):
                 log(f"Runner sync failed.\n Error: {e}")
 
-class ConfigFileEventHandler(FileSystemEventHandler):
-    def __init__(self, debounce_time=1.0):
-        self.debounce_time = debounce_time
-        self.last_triggered = 0
-
-    def on_modified(self, event):
-        if not event.src_path.endswith(configFileName):
-            return
-        current_time = time.time()
-        if current_time - self.last_triggered > self.debounce_time:
-            self.last_triggered = current_time
-            log('cfg updated')
-            readConfig()
-
 log(f"Stock runner starting")
 
 if not readConfig():
@@ -266,12 +250,6 @@ if inRest():
     log("Rest day, exit.")
     sys.exit(0)
 
-event_handler = ConfigFileEventHandler()
-OneObserver = Observer()
-OneObserver.schedule(event_handler, configFolder, recursive=False)
-OneObserver.start()
-
-
 time_start1 = datetime.strptime("9:15", "%H:%M").time()
 time_end1 = datetime.strptime("11:30", "%H:%M").time()
 time_start2 = datetime.strptime("13:00", "%H:%M").time()
@@ -300,6 +278,11 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
             if Cfg_reading:
                 time.sleep(1)
                 continue
+
+            if os.path.getmtime(configFile) > Cfg_ts:
+                log("cfg updated")
+                readConfig()
+
             data = retrieveStockData()
             if type(data) is list:
                 if Names is None:

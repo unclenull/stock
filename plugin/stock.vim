@@ -1,4 +1,4 @@
-" Rest days
+" rest_dates
 " http://tools.2345.com/rili.htm
 " formateJxData()
 
