@@ -103,7 +103,9 @@ def readConfig():
     return True
 
 
+# last_ts = round(time.time() * 1000)
 def retrieveStockData(number=False):
+    # global last_ts
     global FirstRun, Server
     if FirstRun:
         FirstRun = False
@@ -118,19 +120,23 @@ def retrieveStockData(number=False):
 
     # import pdb; pdb.set_trace()
     url = Server['url_formatter'](Server['codes_str'])
-    # log(f"Retrieve from: {url}")
     try:
+        start_ts = round(time.time() * 1000)
+        # log(f"Retrieve from ({start_ts}): {url}")
         rsp = requests.get(
             url,
             timeout=Config['delay'],
             headers={**Server['headers'], "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
         )
+        # this_ts = round(time.time() * 1000)
+        # log(f'roundtrip ({this_ts}): {this_ts - start_ts}, between: {this_ts - last_ts}')
+        # last_ts = this_ts
         # log(rsp.text)
         if rsp.status_code != 200:
             log(f"Failed to retrieve from ({url}): {rsp.status_code}")
             return str(rsp.status_code)
     except Timeout:
-        msg = f"Request to {url} timed out."
+        msg = f"Request to {url} timed out ({round(time.time() * 1000) - start_ts})."
         log(msg)
         return msg
     except Exception as er:
@@ -174,12 +180,10 @@ def checkNotify(data):
         if value > 0 and value >= threshold:
             up = True
             txts.append(f"{name}: {value}")
-            log("Notified: " + str(Notified))
             Notified.append(i)
         elif value <= 0 and value <= -threshold:
             down = True
             txts.append(f"{name}: {value}")
-            log("Notified: " + str(Notified))
             Notified.append(i)
 
     if len(txts):

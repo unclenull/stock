@@ -14,6 +14,7 @@ let g:stk_data_lock_path = g:stk_folder . '/stock.dat.lock'
 let g:stk_runner_pid_path = g:stk_folder . '/stock.runner.pid'
 let g:stk_runner_path = expand('<sfile>:p:h') . "/stock_runner.py"
 let g:stk_config = {}
+let g:stk_delay = 0
 let g:stk_last_read_time = 0
 let g:stk_cfg_ts = 0
 let g:stk_timer = 0
@@ -69,17 +70,21 @@ EOF
   return l:running
 endfunction
 
-function! s:CheckRunner()
+function! s:CheckRunner(silent)
   if filereadable(g:stk_runner_pid_path)
     if getfsize(g:stk_runner_pid_path) > 0
       let l:pid = readfile(g:stk_runner_pid_path)[0]
       "echom 'pid: ' . l:pid
       if s:IsProcessRunning(l:pid)
-        call s:Log("Runner is already running")
+        if !a:silent
+          call s:Log("Runner is already running")
+        endif
         return l:pid
       endif
     else
-      call s:Log("Runner is starting by another instance")
+      if !a:silent
+        call s:Log("Runner is starting by another instance")
+      endif
       return 1
     endif
   endif
@@ -142,25 +147,11 @@ function GetMidnight()
 end
 
 function KillPid(pid)
-  local function on_exit(code, signal)
-    if code ~= 0 then
-      vim.schedule(function()
-        vim.api.nvim_echo({{"Failed to kill PID: "..pid.." (code "..code..")", "ErrorMsg"}}, true, {})
-      end)
-    else
-      CloseDataInner()
-      vim.fn.StockRun()
-    end
-  end
-
-  local ok, err = pcall(function()
-    vim.loop.kill(pid, 15, on_exit)
-  end)
-
-  if not ok then
-    vim.schedule(function()
-      vim.api.nvim_echo({{"Failed to invoke 'pcall', Lua error: "..err, "ErrorMsg"}}, true, {})
-    end)
+  print("Killing runner: " .. pid)
+  vim.loop.kill(pid, 9, on_exit)
+  if ok then
+  else
+    print({{"Failed to invoke 'pcall', Lua error: "..err, "ErrorMsg"}}, true, {})
   end
 end
 
@@ -188,6 +179,9 @@ function! s:ReadConfig()
       call s:Log('No stock code defined')
       return 0
     endif
+
+    let g:stk_delay = (g:stk_config['delay'] + 1) * 1000
+
     return 1
   else
     call s:Log("File does not exist: " . g:stk_config_path)
@@ -239,7 +233,7 @@ function! s:StartRunner(check)
   let l:failed = 0
 
   try
-    if a:check && s:CheckRunner()
+    if a:check && s:CheckRunner(0)
       throw ''
     endif
 
@@ -315,7 +309,7 @@ function! s:DisplayPrices(timer)
   "echom 'a:timer: ' . string(a:timer)
   if l:waiting
     "echom 'waiting: ' string(l:tData) . ' ' . string(g:stk_last_read_time)
-    if !s:CheckRunner()
+    if !s:CheckRunner(1)
       call s:StartRunner(0)
       return
     endif
@@ -434,7 +428,7 @@ function! s:DisplayPrices(timer)
     let l:min = l:min % 60
     call s:Log('Scheduled after ' . l:hour . ':' . l:min)
   else
-    let g:stk_timer = timer_start(g:stk_config['delay'] * 1000, 's:DisplayPrices')
+    let g:stk_timer = timer_start(g:stk_delay, 's:DisplayPrices')
   endif
 endfunction
 
@@ -446,36 +440,41 @@ function! StockRun()
   let l:needRunner = 0
   let l:timehour = strftime("%H%M")
 
-  let l:data_modified_time = getftime(g:stk_data_path)
-  let g:stk_last_read_time = localtime()
-  if getftime(g:stk_config_path) > l:data_modified_time
+  if !filereadable(g:stk_data_path) || getfsize(g:stk_data_path) == 0
     let l:needRunner = 1
   else
-    let l:today_start = luaeval('GetMidnight()')
-    if s:InRestDay()
-      "strptime is not available on windows
-      "Simpler way to ensure it's the latest
-      if l:data_modified_time < l:today_start
-        "echom 'data modified time: ' . l:data_modified_time . ' today start: ' . l:today_start
-        let l:needRunner = 1
-      endif
+    let l:data_modified_time = getftime(g:stk_data_path)
+    let g:stk_last_read_time = localtime()
+
+    if getftime(g:stk_config_path) > l:data_modified_time
+      let l:needRunner = 1
     else
-      let l:timehour = strftime("%H%M")
-      if l:timehour < "0915"
+      let l:today_start = luaeval('GetMidnight()')
+      if s:InRestDay()
+        "strptime is not available on windows
+        "Simpler way to ensure it's the latest
         if l:data_modified_time < l:today_start
-          let l:needRunner = 1
-        endif
-      elseif l:timehour >= "1130" && l:timehour < "1300"
-        if l:data_modified_time < l:today_start + 11 * 3600 + 30 * 60
-          let l:needRunner = 1
-        endif
-      elseif l:timehour >= "1600"
-        if l:data_modified_time < l:today_start + 16 * 3600
+          "echom 'data modified time: ' . l:data_modified_time . ' today start: ' . l:today_start
           let l:needRunner = 1
         endif
       else
-        "Trading time
-        let l:needRunner = !s:CheckRunner()
+        let l:timehour = strftime("%H%M")
+        if l:timehour < "0915"
+          if l:data_modified_time < l:today_start
+            let l:needRunner = 1
+          endif
+        elseif l:timehour >= "1130" && l:timehour < "1300"
+          if l:data_modified_time < l:today_start + 11 * 3600 + 30 * 60
+            let l:needRunner = 1
+          endif
+        elseif l:timehour >= "1600"
+          if l:data_modified_time < l:today_start + 16 * 3600
+            let l:needRunner = 1
+          endif
+        else
+          "Trading time
+          let l:needRunner = !s:CheckRunner(0)
+        endif
       endif
     endif
   endif
@@ -487,19 +486,24 @@ function! StockRun()
   endif
 endfunction
 
+function! StockRefresh()
+  echom 'refreshing'
+  call writefile([""], g:stk_data_path, 'b') " prevent newline
+  call StockRun()
+endfunction
+
 function! StockUpdate()
   if g:stk_timer
     call timer_stop(g:stk_timer)
     let g:stk_timer = 0
   endif
 
-  let l:pid = s:CheckRunner()
+  let l:pid = s:CheckRunner(1)
   if l:pid > 1
-    lua KillPid(vim.fn.eval('l:pid'))
-  else
-    lua CloseDataInner()
-    call StockRun()
+    echom "Killing runner: " .. l:pid
+    lua vim.loop.kill(vim.fn['eval']('l:pid'), 9)
   endif
+  call StockRefresh()
 endfunction
 
 function! StockClean()
