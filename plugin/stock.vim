@@ -2,6 +2,15 @@
 " http://tools.2345.com/rili.htm
 " formateJxData()
 
+hi stk_up guifg='#5d6b00'
+hi stk_up_hl guifg='#cb4b16'
+hi stk_down guifg='#1d7069'
+hi stk_down_hl guifg='#268bdc'
+hi stk_even guifg='#586e6b'
+
+let s:stk_sep1 = '/'
+let s:stk_sep2 = '|'
+
 let g:stk_folder = $HOME . '/.stock'
 if !isdirectory(g:stk_folder)
   call mkdir(g:stk_folder)
@@ -29,25 +38,6 @@ function! s:LogErr(msg)
   echom "[STOCK-". strftime("%m/%d %H:%M:%S") . ']ERROR: ' . a:msg
   echohl None
 endfunction
-
-function! AirlineThemePatch(palette)
-  let a:palette.accents.up = [ '#5d6b00', '', 0, '', '' ]
-  let a:palette.accents.up_hl = [ '#cb4b16', '', 0, '', 'bold' ]
-  let a:palette.accents.down = [ '#1d7069', '', 0, '', '' ]
-  let a:palette.accents.down_hl = [ '#268bdc', '', 0, '', 'bold' ]
-  let a:palette.accents.even = [ '#586e6b', '', 0, '', '' ]
-endfunction
-let g:airline_theme_patch_func = 'AirlineThemePatch'
-call airline#highlighter#add_accent('up')
-call airline#highlighter#add_accent('up_hl')
-call airline#highlighter#add_accent('down')
-call airline#highlighter#add_accent('down_hl')
-call airline#highlighter#add_accent('even')
-
-let g:stk_sep1 = '/'
-let g:stk_sep2 = '|'
-call airline#parts#define_accent(g:stk_sep1, 'even')
-call airline#parts#define_accent(g:stk_sep2, 'even')
 
 function! s:IsProcessRunning(pid)
   let l:running = 0
@@ -156,6 +146,10 @@ function KillPid(pid)
 end
 
 EOF
+
+function! s:CreateText(txt, hl)
+  return "%#" . a:hl . '#' . a:txt
+endfunction
 
 function! s:ReadData()
   let l:content = luaeval('ReadDataInner()')
@@ -317,57 +311,43 @@ function! s:DisplayPrices(timer)
     if has_key(l:data, 'prices')
       if type(l:data['prices']) == v:t_string
         let l:error = "[STOCK] Error"
-        call airline#parts#define_accent(l:error, 'red')
-        call airline#parts#define_text(l:error, l:error) " At least on %{}% should appear, otherwise nothing is displayed
-        let g:airline_section_c = airline#section#create(l:error)
-        call airline#update_statusline()
+        let g:stk_output = s:CreateText(l:error, 'ErrorMsg')
         call s:LogErr("Runner: " . l:data['prices'])
       elseif !empty(l:data['prices'])
         let l:countIndices = len(g:stk_config['indices'])
         let l:ix = 0
-        let l:text = []
+        let l:text = ''
 
         for [name, value] in l:data['prices']
           if l:ix < l:countIndices
             if type(value) == v:t_string "- when non-exist
-              let name = value
+              let l:valueStr = value
             else
-              let name = string(value)
+              let l:valueStr = string(value)
             endif
-            let valueStr = name
           else
-            let valueStr = name . value
+            let l:valueStr = name . value
           endif
-
-          call add(l:text, name)
-          if l:ix < l:countIndices
-            if l:ix == 2
-              call add(l:text, g:stk_sep2)
-            else
-              call add(l:text, g:stk_sep1)
-            endif
-          endif
-          call airline#parts#define_text(name, valueStr)
 
           let l:undefined = 0
           if l:ix < l:countIndices
             if type(value) == v:t_string && value == '-'
-              call airline#parts#define_accent(name, 'even')
+              let l:hl = 'stk_even'
             else
               let l:threshold = g:stk_config["threshold"]["indices"][ix]
               if value >= l:threshold
-                call airline#parts#define_accent(name, 'up_hl')
+                let l:hl = 'stk_up_hl'
               elseif value <= -l:threshold
-                call airline#parts#define_accent(name, 'down_hl')
+                let l:hl = 'stk_down_hl'
               else
                 let l:undefined = 1
               endif
             endif
           else
             if value >= g:stk_config["threshold"]["up"]
-              call airline#parts#define_accent(name, 'up_hl')
+              let l:hl = 'stk_up_hl'
             elseif value <= -g:stk_config["threshold"]["down"]
-              call airline#parts#define_accent(name, 'down_hl')
+              let l:hl = 'stk_down_hl'
             else
               let l:undefined = 1
             endif
@@ -375,18 +355,23 @@ function! s:DisplayPrices(timer)
 
           if l:undefined
             if value == 0
-              call airline#parts#define_accent(name, 'even')
+              let l:hl = 'stk_even'
             elseif value > 0
-              call airline#parts#define_accent(name, 'up')
+              let l:hl = 'stk_up'
             else
-              call airline#parts#define_accent(name, 'down')
+              let l:hl = 'stk_down'
             endif
+          endif
+
+          let l:text = l:text . s:CreateText(l:valueStr, l:hl)
+
+          if l:ix < l:countIndices
+            let l:text = l:text . s:CreateText(l:ix == 2 ? s:stk_sep2 : s:stk_sep1, 'stk_even')
           endif
 
           let l:ix += 1
         endfor
-        let g:airline_section_c = substitute(airline#section#create(l:text), 'airline#util#wrap', 'StkCheckWin', 'g')
-        call airline#update_statusline()
+        let g:stk_output = l:text
       else
         call s:Log('Prices are empty')
       endif
@@ -517,6 +502,10 @@ endfunction
 
 function! StockPrices()
   call s:Log(system("python " . g:stk_runner_path . ' price')[:-2])
+endfunction
+
+function! LualineFromStock()
+  return g:stk_output
 endfunction
 
 
