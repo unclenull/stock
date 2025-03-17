@@ -248,13 +248,12 @@ def delDataLockFile():
             if e.errno == errno.EACCES and "used by another process" in str(e):
                 log(f"Runner sync failed.\n Error: {e}")
 
+truncate_if_large(logFile)
+LogFileHandle = open(logFile, 'a', encoding="utf-8")
 log(f"Stock runner starting")
 
 if not readConfig():
     exit(1)
-
-truncate_if_large(logFile)
-LogFileHandle = open(logFile, 'a', encoding="utf-8")
 
 if len(sys.argv) > 1:
     FirstRun = False
