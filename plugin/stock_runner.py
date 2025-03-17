@@ -23,7 +23,6 @@ dataLockFile = f"{folder}/stock.dat.lock"
 runnerFile = f"{folder}/stock.runner.pid"
 logFile = f"{folder}/stock.log"
 
-LogFileHandle = open(logFile, 'a', encoding="utf-8")
 Pid = os.getpid()
 
 Cfg_reading = False
@@ -36,6 +35,32 @@ JsonData = None
 FirstRun = True
 Server = None
 Names = None
+
+def truncate_if_large(file_path, max_size=2 * 1024 * 1024, keep_lines=100):
+    if os.path.getsize(file_path) < max_size:
+        return
+    with open(file_path, 'r+', encoding='utf-8') as f:
+        # Seek to the end of the file and read the last part
+        f.seek(0, os.SEEK_END)
+        end_pos = f.tell()
+        buffer_size = 1024
+        lines = []
+        current_pos = max(end_pos - buffer_size, 0)
+
+        while len(lines) < keep_lines and current_pos != 0:
+            f.seek(current_pos, os.SEEK_SET)
+            chunk = f.read(buffer_size)
+            new_lines = chunk.splitlines()
+            lines = new_lines + lines
+            current_pos = max(current_pos - buffer_size, 0)
+
+        # Keep only the last `keep_lines` lines
+        lines = lines[-keep_lines:]
+        
+        # Truncate and write the last lines
+        f.seek(0, os.SEEK_SET)
+        f.truncate()
+        f.writelines(line + '\n' for line in lines)
 
 def log(msg):
     LogFileHandle.write(f"{datetime.now().strftime('%m-%d %H:%M:%S')}({time.time()})[{Pid}]: {msg}\n")
@@ -227,6 +252,9 @@ log(f"Stock runner starting")
 
 if not readConfig():
     exit(1)
+
+truncate_if_large(logFile)
+LogFileHandle = open(logFile, 'a', encoding="utf-8")
 
 if len(sys.argv) > 1:
     FirstRun = False
