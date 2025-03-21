@@ -505,6 +505,7 @@ function! StockPrices()
 endfunction
 
 function! LualineFromStock()
+  " % is escaped when use directly
   return g:stk_output
 endfunction
 
