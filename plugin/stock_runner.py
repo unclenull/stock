@@ -342,6 +342,9 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
             # log(f"Data modified: {os.path.getmtime(dataFile)}")
             # log(f"2 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%H:%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%H:%M:%S')}")
 
+            if inRest():
+                log("Rest day, exit. (wake from sleep)")
+                break
             now = datetime.now().time()
             if now >= time_start1 and now <= time_end1 \
                     or now >= time_start2 and now <= time_end2:

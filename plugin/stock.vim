@@ -397,6 +397,10 @@ function! s:DisplayPrices(timer)
       let l:target_days = s:FindNextOpenDay()
     endif
   endif
+  if (l:target_days || l:target_hour) && localtime() - g:stk_last_read_time > 2000
+    call StockRun() "Wake from sleep, start from scratch to ensure data is the latest
+    return
+  end 
 
   if l:target_days
     let l:min = (24 * l:target_days - str2nr(strftime("%H"))) * 60 - str2nr(strftime("%M"))
