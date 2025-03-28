@@ -3,6 +3,7 @@ import json
 import random
 
 NAME_PLACEHOLDER = '?'
+VAL_PLACEHOLDER = '-'
 
 def _qq_code_converter(code, isIndex=False):
     if isIndex:
@@ -30,7 +31,7 @@ def _qq_code_converter(code, isIndex=False):
     else:
         return "bj" + code
 
-def _qq_rsp_parser(rsp, server, number):
+def _qq_rsp_parser(rsp, server, price):
     data = []
     ls = rsp.text.split("\n")
     # print(ls)
@@ -41,7 +42,7 @@ def _qq_rsp_parser(rsp, server, number):
         slices = item.split("=")[1][1:].split("~")
         # import pdb; pdb.set_trace()
         title = slices[1]
-        val = float(slices[3 if number else 32])
+        val = float(slices[3 if price else 32])
         data.append([title[0:2], val])
     return data
 
@@ -78,7 +79,7 @@ def _sina_code_converter(code, isIndex=False):
     else:
         return "s_bj" + code
 
-def _sina_rsp_parser(rsp, server, number):
+def _sina_rsp_parser(rsp, server, price):
     data = []
     ls = rsp.text.split("\n")
     # print(ls)
@@ -89,13 +90,13 @@ def _sina_rsp_parser(rsp, server, number):
         slices = item.split("=")[1][1:].split(",")
         if len(slices) > 8:
             title = slices[1]
-            val = float(slices[6 if number else 8])
+            val = float(slices[6 if price else 8])
         else:
             title = slices[0]
             if float(slices[1]) == 0:
-                val = '-' # non-support
+                val = VAL_PLACEHOLDER # non-support
             else:
-                val = float(slices[1 if number else 3])
+                val = float(slices[1 if price else 3])
         data.append([title[0:2], val])
     return data
 
@@ -130,12 +131,12 @@ def _east_code_converter(code, isIndex=False):
     else:
         return "0." + code
 
-def _east_rsp_parser(rsp, server, number):
+def _east_rsp_parser(rsp, server, price):
     data = []
     ls = json.loads(rsp.text[28:-2])['data']['diff']
     # import pdb; pdb.set_trace()
     for item in ls:
-        data.append([item['f14'].replace(' ', '')[0:2], item['f2' if number else 'f3']])
+        data.append([item['f14'], item['f2' if price else 'f3']])
     return data
 
 east = {
@@ -173,14 +174,14 @@ def _xq_code_converter(code, isIndex=False):
     else:
         return "BJ" + code
 
-def _xq_rsp_parser(rsp, server, number):
+def _xq_rsp_parser(rsp, server, price):
     data = []
     ls = json.loads(rsp.text)['data']
     # print(ls)
     # import pdb; pdb.set_trace()
     dataDict = {}
     for item in ls:
-        dataDict[item['symbol']] = item['current' if number else 'percent']
+        dataDict[item['symbol']] = item['current' if price else 'percent']
     for code in server['codes']:
         data.append([NAME_PLACEHOLDER, dataDict[code]])
     return data
@@ -229,7 +230,7 @@ def _cls_rsp_parser(rsp, server, _):
         if code in dc:
             data.append([NAME_PLACEHOLDER, round(dc[code] * 100, 2)])
         else:
-            data.append([NAME_PLACEHOLDER, '-'])
+            data.append([NAME_PLACEHOLDER, VAL_PLACEHOLDER])
     return data
 
 cls = {
@@ -240,5 +241,29 @@ cls = {
     'has_price': False,
 }
 
+def _sohu_code_converter(code, isIndex=False):
+    if isIndex:
+        return ('zs_' + code) if code.isdigit() else ''
+    else:
+        return 'cn_' + code
 
-Servers = (east, qq, sina, xq, cls)
+def _sohu_rsp_parser(rsp, server, price):
+    data = []
+    ls = json.loads(rsp.text[10:-3])[1:]
+    # import pdb; pdb.set_trace()
+    for item in ls:
+        if len(item):
+            data.append([item[1], item[2 if price else 3]])
+        else:
+            data.append([NAME_PLACEHOLDER, VAL_PLACEHOLDER])
+    return data
+
+
+sohu = {
+    'url_formatter': lambda codes: f"http://s.m.sohu.com/newstocklistq?code={codes}&_={round(datetime.now().timestamp()*1000)}",
+    'headers': {"Referer": "http://s.m.sohu.com/h5apps/t/mystock.html"},
+    'code_converter': _sohu_code_converter,
+    'rsp_parser': _sohu_rsp_parser,
+    'has_price': True,
+}
+Servers = (east, qq, sina, xq, cls, sohu)

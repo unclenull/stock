@@ -22,6 +22,7 @@ dataFile = f"{folder}/stock.dat.json"
 dataLockFile = f"{folder}/stock.dat.lock"
 runnerFile = f"{folder}/stock.runner.pid"
 logFile = f"{folder}/stock.log"
+TEST_SERVER = int(sys.argv[1]) if len(sys.argv) > 1 else  None
 
 Pid = os.getpid()
 
@@ -129,25 +130,28 @@ def readConfig():
 
 
 # last_ts = round(time.time() * 1000)
-def retrieveStockData(number=False):
+def retrieveStockData(price=False):
     # global last_ts
     global FirstRun, Server
-    if FirstRun:
-        FirstRun = False
-        Server = Servers[0] # The first one returns full data
+    if TEST_SERVER is not None:
+        Server = Servers[TEST_SERVER]
     else:
-        if number:
-            servers = [item for item in Servers if item['has_price']]  # Custom condition
+        if FirstRun:
+            FirstRun = False
+            Server = Servers[0] # The first one returns full data
         else:
-            servers = Servers
-        Server = random.choice(servers)
-    # Server = Servers[3]
+            if price:
+                servers = [item for item in Servers if item['has_price']]  # Custom condition
+            else:
+                servers = Servers
+            Server = random.choice(servers)
 
     # import pdb; pdb.set_trace()
     url = Server['url_formatter'](Server['codes_str'])
     try:
         start_ts = round(time.time() * 1000)
-        # log(f"Retrieve from ({start_ts}): {url}")
+        if TEST_SERVER is not None:
+            log(f"Retrieve from ({start_ts}): {url}")
         rsp = requests.get(
             url,
             timeout=Config['delay'],
@@ -169,7 +173,10 @@ def retrieveStockData(number=False):
         return repr(er)
 
     try:
-        data = Server['rsp_parser'](rsp, Server, number)
+        data = Server['rsp_parser'](rsp, Server, price)
+        if Server['has_price']:
+            for i, (name, _) in enumerate(data):
+                data[i][0] = name[0:2].replace(' ', '')
         # import pdb; pdb.set_trace()
         # log(f"Parsed: {json.dumps(data)}")
         return data
@@ -255,7 +262,7 @@ log(f"Stock runner starting")
 if not readConfig():
     exit(1)
 
-if len(sys.argv) > 1:
+if TEST_SERVER is not None:
     FirstRun = False
     log = print
     print(retrieveStockData(sys.argv[1] == 'price'))
@@ -321,7 +328,7 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
                 elif data[0][0] == NAME_PLACEHOLDER:
                     for i, (name, value) in enumerate(data):
                         data[i][0] = Names[i]
-                
+
                 checkNotify(data)
 
             JsonData['prices'] = data

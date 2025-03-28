@@ -2,6 +2,8 @@
 " http://tools.2345.com/rili.htm
 " formateJxData()
 
+let VAL_PLACEHOLDER = '-'
+
 hi stk_up guifg='#5d6b00'
 hi stk_up_hl guifg='#cb4b16'
 hi stk_down guifg='#1d7069'
@@ -331,7 +333,7 @@ function! s:DisplayPrices(timer)
 
           let l:undefined = 0
           if l:ix < l:countIndices
-            if type(value) == v:t_string && value == '-'
+            if type(value) == v:t_string && value == VAL_PLACEHOLDER
               let l:hl = 'stk_even'
             else
               let l:threshold = g:stk_config["threshold"]["indices"][ix]
