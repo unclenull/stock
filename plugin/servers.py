@@ -253,7 +253,7 @@ def _sohu_rsp_parser(rsp, server, price):
     # import pdb; pdb.set_trace()
     for item in ls:
         if len(item):
-            data.append([item[1], item[2 if price else 3]])
+            data.append([item[1], item[2] if price else item[3][0:-1]])
         else:
             data.append([NAME_PLACEHOLDER, VAL_PLACEHOLDER])
     return data

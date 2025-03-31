@@ -2,7 +2,6 @@
 " http://tools.2345.com/rili.htm
 " formateJxData()
 
-let VAL_PLACEHOLDER = '-'
 
 hi stk_up guifg='#5d6b00'
 hi stk_up_hl guifg='#cb4b16'
@@ -10,25 +9,26 @@ hi stk_down guifg='#1d7069'
 hi stk_down_hl guifg='#268bdc'
 hi stk_even guifg='#586e6b'
 
+let s:VAL_PLACEHOLDER = '-'
 let s:stk_sep1 = '/'
 let s:stk_sep2 = '|'
 
-let g:stk_folder = $HOME . '/.stock'
-if !isdirectory(g:stk_folder)
-  call mkdir(g:stk_folder)
-  call mkdir(g:stk_folder . '/cfg')
+let s:stk_folder = $HOME . '/.stock'
+if !isdirectory(s:stk_folder)
+  call mkdir(s:stk_folder)
+  call mkdir(s:stk_folder . '/cfg')
 endif
 
-let g:stk_config_path = g:stk_folder . '/cfg/stock.cfg.json'
-let g:stk_data_path = g:stk_folder. '/stock.dat.json'
-let g:stk_data_lock_path = g:stk_folder . '/stock.dat.lock'
-let g:stk_runner_pid_path = g:stk_folder . '/stock.runner.pid'
-let g:stk_runner_path = expand('<sfile>:p:h') . "/stock_runner.py"
-let g:stk_config = {}
-let g:stk_delay = 0
-let g:stk_last_read_time = 0
-let g:stk_cfg_ts = 0
-let g:stk_timer = 0
+let s:stk_config_path = s:stk_folder . '/cfg/stock.cfg.json'
+let g:stk_data_path = s:stk_folder. '/stock.dat.json'
+let s:stk_data_lock_path = s:stk_folder . '/stock.dat.lock'
+let s:stk_runner_pid_path = s:stk_folder . '/stock.runner.pid'
+let s:stk_runner_path = expand('<sfile>:p:h') . "/stock_runner.py"
+let s:stk_config = {}
+let s:stk_delay = 0
+let s:stk_last_read_time = 0
+let s:stk_cfg_ts = 0
+let s:stk_timer = 0
 let g:stk_output = ''
 
 function! s:Log(msg)
@@ -63,9 +63,9 @@ EOF
 endfunction
 
 function! s:CheckRunner(silent)
-  if filereadable(g:stk_runner_pid_path)
-    if getfsize(g:stk_runner_pid_path) > 0
-      let l:pid = readfile(g:stk_runner_pid_path)[0]
+  if filereadable(s:stk_runner_pid_path)
+    if getfsize(s:stk_runner_pid_path) > 0
+      let l:pid = readfile(s:stk_runner_pid_path)[0]
       "echom 'pid: ' . l:pid
       if s:IsProcessRunning(l:pid)
         if !a:silent
@@ -156,7 +156,7 @@ endfunction
 function! s:ReadData()
   let l:content = luaeval('ReadDataInner()')
   "echom 'data content: ' . l:content
-  let g:stk_last_read_time = localtime()
+  let s:stk_last_read_time = localtime()
   if len(l:content) > 0
     return json_decode(l:content)
   else
@@ -166,24 +166,24 @@ endfunction
 
 function! s:ReadConfig()
   "echom 'ReadConfig'
-  if filereadable(g:stk_config_path)
-    let g:stk_cfg_ts = getftime(g:stk_config_path)
+  if filereadable(s:stk_config_path)
+    let s:stk_cfg_ts = getftime(s:stk_config_path)
 
-    let l:json_content = join(readfile(g:stk_config_path), "\n")
-    let g:stk_config = json_decode(l:json_content)
-    if empty(g:stk_config['codes'])
+    let l:json_content = join(readfile(s:stk_config_path), "\n")
+    let s:stk_config = json_decode(l:json_content)
+    if empty(s:stk_config['codes'])
       call s:Log('No stock code defined')
       return 0
     endif
 
-    let g:stk_delay = (g:stk_config['delay'] + 1) * 1000
+    let s:stk_delay = (s:stk_config['delay'] + 1) * 1000
 
     return 1
   else
-    call s:Log("File does not exist: " . g:stk_config_path)
+    call s:Log("File does not exist: " . s:stk_config_path)
     let l:data = {"codes": [], "indices": ["000001", "399001", "399006", "899050", "000985", "HSI"], "threshold": {"indices": [2, 3, 4, 5, 2, 3], "up": 7, "down": 5}, "delay": 6, "rest_dates": []}
     let l:json_content = json_encode(l:data)
-    call writefile(split(l:json_content, "\n"), g:stk_config_path)
+    call writefile(split(l:json_content, "\n"), s:stk_config_path)
     return 0
   endif
 endfunction
@@ -196,7 +196,7 @@ function! s:InRestDay(...)
   endif
   let l:date = strftime("%Y-%m-%d", l:timestamp)
 
-  if !(str2nr(strftime("%w", l:timestamp)) % 6) || index(g:stk_config['rest_dates'], l:date) > -1
+  if !(str2nr(strftime("%w", l:timestamp)) % 6) || index(s:stk_config['rest_dates'], l:date) > -1
     "call s:Log((a:0 == 0 ? 'Today' : l:date) . ' is a rest day')
     return 1
   else
@@ -233,9 +233,9 @@ function! s:StartRunner(check)
       throw ''
     endif
 
-    call writefile([""], g:stk_runner_pid_path, 'b') " prevent newline
+    call writefile([""], s:stk_runner_pid_path, 'b') " prevent newline
 
-    let l:jobid = jobstart(["python", g:stk_runner_path], {'on_stderr': {job_id, data, event -> s:handle_stderr(data)}})
+    let l:jobid = jobstart(["python", s:stk_runner_path], {'on_stderr': {job_id, data, event -> s:handle_stderr(data)}})
 
     if l:jobid == -1
       call s:LogErr("runner not executable")
@@ -250,7 +250,7 @@ function! s:StartRunner(check)
     else
       let l:timestamp = localtime()
       call s:Log("Runner started at " . string(l:timestamp))
-      call writefile([string(jobpid(l:jobid))], g:stk_runner_pid_path)
+      call writefile([string(jobpid(l:jobid))], s:stk_runner_pid_path)
     endif
   catch
     if v:exception != ''
@@ -259,52 +259,52 @@ function! s:StartRunner(check)
     endif
   finally
       if !l:failed
-        let g:stk_timer = timer_start(2000, { -> s:WaitDisplay(0) })
+        let s:stk_timer = timer_start(2000, { -> s:WaitDisplay(0) })
       endif
   endtry
 endfunction
 
 function! s:WaitDisplay(timer)
   "echom 'WaitDisplay'
-  " echom getftime(g:stk_data_path) . ' ' . g:stk_last_read_time
-  if getftime(g:stk_data_path) > g:stk_last_read_time
+  " echom getftime(g:stk_data_path) . ' ' . s:stk_last_read_time
+  if getftime(g:stk_data_path) > s:stk_last_read_time
     call s:DisplayPrices(0)
   else
     call s:Log('Update is pending')
-    let g:stk_timer = timer_start(1000, 's:WaitDisplay')
+    let s:stk_timer = timer_start(1000, 's:WaitDisplay')
   endif
 endfunction
 
 function! s:DisplayPrices(timer)
   "echom 'DisplayPrices'
-  let l:tCfg = getftime(g:stk_config_path)
-  if l:tCfg > g:stk_cfg_ts
+  let l:tCfg = getftime(s:stk_config_path)
+  if l:tCfg > s:stk_cfg_ts
     call s:ReadConfig()
-    let g:stk_cfg_ts = l:tCfg
+    let s:stk_cfg_ts = l:tCfg
   endif
 
   let l:tData = getftime(g:stk_data_path)
 
-  if !filereadable(g:stk_data_lock_path)
+  if !filereadable(s:stk_data_lock_path)
     let l:tLock = 12345678901 ":locked
   else
-    let l:tLock = getftime(g:stk_data_lock_path)
+    let l:tLock = getftime(s:stk_data_lock_path)
   endif
   "echom 'Lock/Data: ' . string(l:tLock) . '/' . string(l:tData)
   if l:tLock > l:tData
     call s:Log('Data is locked (if loop, runner quit abruptly, go to verify then call <leader>su...)')
-    let g:stk_timer = timer_start(1000, 's:DisplayPrices')
+    let s:stk_timer = timer_start(1000, 's:DisplayPrices')
     return
   endif
 
-  let l:updated = l:tData > g:stk_last_read_time
+  let l:updated = l:tData > s:stk_last_read_time
   let l:data = s:ReadData()
   "Only check runner if called in market time (by schedule) & data is not updated by runner
   let l:waiting = a:timer && !l:updated
-  "echom 'modified data/last: ' string(l:tData) . ' ' . string(g:stk_last_read_time)
+  "echom 'modified data/last: ' string(l:tData) . ' ' . string(s:stk_last_read_time)
   "echom 'a:timer: ' . string(a:timer)
   if l:waiting
-    "echom 'waiting: ' string(l:tData) . ' ' . string(g:stk_last_read_time)
+    "echom 'waiting: ' string(l:tData) . ' ' . string(s:stk_last_read_time)
     if !s:CheckRunner(1)
       call s:StartRunner(0)
       return
@@ -316,7 +316,7 @@ function! s:DisplayPrices(timer)
         let g:stk_output = s:CreateText(l:error, 'ErrorMsg')
         call s:LogErr("Runner: " . l:data['prices'])
       elseif !empty(l:data['prices'])
-        let l:countIndices = len(g:stk_config['indices'])
+        let l:countIndices = len(s:stk_config['indices'])
         let l:ix = 0
         let l:text = ''
 
@@ -333,10 +333,10 @@ function! s:DisplayPrices(timer)
 
           let l:undefined = 0
           if l:ix < l:countIndices
-            if type(value) == v:t_string && value == VAL_PLACEHOLDER
+            if type(value) == v:t_string && value == s:VAL_PLACEHOLDER
               let l:hl = 'stk_even'
             else
-              let l:threshold = g:stk_config["threshold"]["indices"][ix]
+              let l:threshold = s:stk_config["threshold"]["indices"][ix]
               if value >= l:threshold
                 let l:hl = 'stk_up_hl'
               elseif value <= -l:threshold
@@ -346,9 +346,9 @@ function! s:DisplayPrices(timer)
               endif
             endif
           else
-            if value >= g:stk_config["threshold"]["up"]
+            if value >= s:stk_config["threshold"]["up"]
               let l:hl = 'stk_up_hl'
-            elseif value <= -g:stk_config["threshold"]["down"]
+            elseif value <= -s:stk_config["threshold"]["down"]
               let l:hl = 'stk_down_hl'
             else
               let l:undefined = 1
@@ -399,7 +399,7 @@ function! s:DisplayPrices(timer)
       let l:target_days = s:FindNextOpenDay()
     endif
   endif
-  if (l:target_days || l:target_hour) && localtime() - g:stk_last_read_time > 2000
+  if (l:target_days || l:target_hour) && localtime() - s:stk_last_read_time > 2000
     call StockRun() "Wake from sleep, start from scratch to ensure data is the latest
     return
   end 
@@ -407,19 +407,19 @@ function! s:DisplayPrices(timer)
   if l:target_days
     let l:min = (24 * l:target_days - str2nr(strftime("%H"))) * 60 - str2nr(strftime("%M"))
     let l:min += 9 * 60 + 15
-    let g:stk_timer = timer_start(l:min * 60000, 's:StartRunner')
+    let s:stk_timer = timer_start(l:min * 60000, 's:StartRunner')
     call s:Log('Scheduled after ' . l:target_days . ' day(s) [' . strftime("%Y-%m-%d %a", localtime() + l:target_days * 86400) . ']')
   elseif l:target_hour
     let l:current_hour = str2nr(strftime("%H"))
     let l:current_minute = str2nr(strftime("%M"))
     let l:min = (l:target_hour - l:current_hour) * 60 + (l:target_minute - l:current_minute)
-    let g:stk_timer = timer_start(l:min * 60000, 's:StartRunner')
+    let s:stk_timer = timer_start(l:min * 60000, 's:StartRunner')
 
     let l:hour = l:min / 60
     let l:min = l:min % 60
     call s:Log('Scheduled after ' . l:hour . ':' . l:min)
   else
-    let g:stk_timer = timer_start(g:stk_delay, 's:DisplayPrices')
+    let s:stk_timer = timer_start(s:stk_delay, 's:DisplayPrices')
   endif
 endfunction
 
@@ -435,9 +435,9 @@ function! StockRun()
     let l:needRunner = 1
   else
     let l:data_modified_time = getftime(g:stk_data_path)
-    let g:stk_last_read_time = localtime()
+    let s:stk_last_read_time = localtime()
 
-    if getftime(g:stk_config_path) > l:data_modified_time
+    if getftime(s:stk_config_path) > l:data_modified_time
       let l:needRunner = 1
     else
       let l:today_start = luaeval('GetMidnight()')
@@ -484,9 +484,9 @@ function! StockRefresh()
 endfunction
 
 function! StockUpdate()
-  if g:stk_timer
-    call timer_stop(g:stk_timer)
-    let g:stk_timer = 0
+  if s:stk_timer
+    call timer_stop(s:stk_timer)
+    let s:stk_timer = 0
   endif
 
   let l:pid = s:CheckRunner(1)
@@ -507,7 +507,7 @@ function! StkCheckWin(str, _)
 endfunction
 
 function! StockPrices()
-  call s:Log(system("python " . g:stk_runner_path . ' price')[:-2])
+  call s:Log(system("python " . s:stk_runner_path . ' price')[:-2])
 endfunction
 
 function! LualineFromStock()

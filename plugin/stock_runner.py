@@ -22,7 +22,7 @@ dataFile = f"{folder}/stock.dat.json"
 dataLockFile = f"{folder}/stock.dat.lock"
 runnerFile = f"{folder}/stock.runner.pid"
 logFile = f"{folder}/stock.log"
-TEST_SERVER = int(sys.argv[1]) if len(sys.argv) > 1 else  None
+ONCE_MODE = len(sys.argv) > 1
 
 Pid = os.getpid()
 
@@ -130,17 +130,24 @@ def readConfig():
 
 
 # last_ts = round(time.time() * 1000)
-def retrieveStockData(price=False):
+def retrieveStockData():
     # global last_ts
     global FirstRun, Server
-    if TEST_SERVER is not None:
-        Server = Servers[TEST_SERVER]
+    test_server_index = None
+    price_mode = None
+    if ONCE_MODE:
+        if sys.argv[1].isdigit():
+            test_server_index = int(sys.argv[1]) 
+        else:
+            price_mode = True
+    if test_server_index is not None:
+        Server = Servers[test_server_index]
     else:
         if FirstRun:
             FirstRun = False
             Server = Servers[0] # The first one returns full data
         else:
-            if price:
+            if price_mode:
                 servers = [item for item in Servers if item['has_price']]  # Custom condition
             else:
                 servers = Servers
@@ -150,7 +157,7 @@ def retrieveStockData(price=False):
     url = Server['url_formatter'](Server['codes_str'])
     try:
         start_ts = round(time.time() * 1000)
-        if TEST_SERVER is not None:
+        if test_server_index is not None:
             log(f"Retrieve from ({start_ts}): {url}")
         rsp = requests.get(
             url,
@@ -173,7 +180,7 @@ def retrieveStockData(price=False):
         return repr(er)
 
     try:
-        data = Server['rsp_parser'](rsp, Server, price)
+        data = Server['rsp_parser'](rsp, Server, price_mode)
         if Server['has_price']:
             for i, (name, _) in enumerate(data):
                 data[i][0] = name[0:2].replace(' ', '')
@@ -262,10 +269,10 @@ log(f"Stock runner starting")
 if not readConfig():
     exit(1)
 
-if TEST_SERVER is not None:
+if ONCE_MODE:
     FirstRun = False
     log = print
-    print(retrieveStockData(sys.argv[1] == 'price'))
+    print(retrieveStockData())
     exit(0)
 
 sys.excepthook = global_exception_handler
