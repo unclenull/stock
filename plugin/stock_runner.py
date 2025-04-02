@@ -38,6 +38,8 @@ Server = None
 Names = None
 
 def truncate_if_large(file_path, max_size=2 * 1024 * 1024, keep_lines=100):
+    if not os.path.exists(file_path):
+        return
     if os.path.getsize(file_path) < max_size:
         return
     with open(file_path, 'r+', encoding='utf-8') as f:
