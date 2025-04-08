@@ -208,7 +208,7 @@ def checkNotify(data):
             continue
         if i in Notified:
             continue
-        if type(value) is str: # '-'
+        if type(value) is str:  # '-'
             continue
 
         if i < len(Config['indices']):
@@ -321,6 +321,7 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
         if data_modified_date == datetime.now().date() and "notified" in Data:
             Notified = Data["notified"]
         JsonData = {'notified': Notified}
+        lastReadDate = datetime.now().date()
         while True:
             if Cfg_reading:
                 time.sleep(1)
@@ -331,6 +332,18 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
                 readConfig()
 
             data = retrieveStockData()
+
+            market_time = False
+            if inRest():
+                log("Rest day, exit. (wake from sleep)")
+            else:
+                now = datetime.now().time()
+                if now >= time_start1 and now <= time_end1 \
+                        or now >= time_start2 and now <= time_end2:
+                    market_time = True
+                else:
+                    log("Market inactive, exit.")
+
             if type(data) is list:
                 if Names is None:
                     Names = [n for (n, _) in data]
@@ -338,7 +351,10 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
                     for i, (name, value) in enumerate(data):
                         data[i][0] = Names[i]
 
-                checkNotify(data)
+                if lastReadDate != datetime.now().date():  # The next day starts
+                    Notified.clear()
+                elif market_time:
+                    checkNotify(data)
 
             JsonData['prices'] = data
 
@@ -357,14 +373,7 @@ with open(dataFile, 'w', encoding="utf-8") as fData:
             fData.flush()
             # log(f"Data modified: {os.path.getmtime(dataFile)}")
             # log(f"2 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%H:%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%H:%M:%S')}")
-
-            if inRest():
-                log("Rest day, exit. (wake from sleep)")
-                break
-            now = datetime.now().time()
-            if now >= time_start1 and now <= time_end1 \
-                    or now >= time_start2 and now <= time_end2:
+            if market_time:
                 time.sleep(random.randint(Config['delay']-2, Config['delay']))
             else:
-                log("Market inactive, exit.")
                 break
