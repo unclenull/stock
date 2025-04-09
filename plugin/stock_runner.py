@@ -89,7 +89,7 @@ def cleanup():
     os.remove(runnerFile)
 
 def readConfig():
-    global Cfg_reading, Cfg_ts, Config, Rests, Notified, JsonData
+    global Cfg_reading, Cfg_ts, Config, Rests, Notified, JsonData, Names
     Cfg_reading = True
 
     with open(configFile, "r", encoding="utf-8") as f:
