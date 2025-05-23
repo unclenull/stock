@@ -20,7 +20,7 @@ folder = os.path.expanduser("~/.stock")
 configFile = f"{folder}/cfg/stock.cfg.json"
 dataFile = f"{folder}/stock.dat.json"
 dataLockFile = f"{folder}/stock.dat.lock"
-runnerFile = f"{folder}/stock.runner.pid"
+pidFile = f"{folder}/stock.runner.pid"
 logFile = f"{folder}/stock.log"
 ONCE_MODE = len(sys.argv) > 1
 
@@ -36,6 +36,7 @@ JsonData = None
 FirstRun = True
 Server = None
 Names = None
+ContiguousRetry = 0
 
 
 def truncate_if_large(file_path, max_size=2 * 1024 * 1024, keep_lines=100):
@@ -91,7 +92,7 @@ def global_exception_handler(exctype, value, tb):
 
 def cleanup():
     LogFileHandle.close()
-    os.remove(runnerFile)
+    os.remove(pidFile)
 
 
 def readConfig():
@@ -314,11 +315,16 @@ if inRest():
     # log(datetime.fromtimestamp(tsData).strftime('%m-%d') + ' ' + datetime.now().strftime('%m-%d'))
     if datetime.fromtimestamp(tsData).date() != datetime.now().date():
         delDataLockFile()
-        data = {"prices": retrieveStockData()}
+        retry = 3
+        while retry:
+            retry -= 1
+            prices = retrieveStockData()
+            if type(prices) is list:
+                break
         with open(dataLockFile, "w", encoding="utf-8") as fLock, open(
             dataFile, "w", encoding="utf-8"
         ) as fData:
-            fData.write(json.dumps(data, ensure_ascii=False))
+            fData.write(json.dumps({"prices": prices}, ensure_ascii=False))
             # log("Data updated.")
     log("Rest day, exit.")
     sys.exit(0)
@@ -340,7 +346,7 @@ else:
 
 delDataLockFile()
 
-with open(dataFile, "w", encoding="utf-8") as fData:
+with open(dataFile, "w", encoding="utf-8") as fData:  # data cleared
     # log(f'Data opened')
     time.sleep(1)  # getftime in vim returns seconds
     with open(dataLockFile, "w", encoding="utf-8") as fLock:
@@ -357,7 +363,7 @@ with open(dataFile, "w", encoding="utf-8") as fData:
                 log("cfg updated")
                 readConfig()
 
-            data = retrieveStockData()
+            prices = retrieveStockData()
 
             market_time = False
             if inRest():
@@ -371,22 +377,22 @@ with open(dataFile, "w", encoding="utf-8") as fData:
                     and now <= time_end2
                 ):
                     market_time = True
-                else:
-                    log("Market inactive, exit.")
 
-            if type(data) is list:
+            if type(prices) is list:
+                ContiguousRetry = 0
+
                 if Names is None:
-                    Names = [n for (n, _) in data]
-                elif data[0][0] == NAME_PLACEHOLDER:
-                    for i, (name, value) in enumerate(data):
-                        data[i][0] = Names[i]
+                    Names = [n for (n, _) in prices]
+                elif prices[0][0] == NAME_PLACEHOLDER:
+                    for i, (name, value) in enumerate(prices):
+                        prices[i][0] = Names[i]
 
                 if lastReadDate != datetime.now().date():  # The next day starts
                     Notified.clear()
                 elif market_time:
-                    checkNotify(data)
+                    checkNotify(prices)
 
-            JsonData["prices"] = data
+            JsonData["prices"] = prices
 
             fLock.write(" ")
             fLock.flush()
@@ -401,9 +407,16 @@ with open(dataFile, "w", encoding="utf-8") as fData:
             fData.write(json.dumps(JsonData, ensure_ascii=False))
             fData.truncate()
             fData.flush()
-            # log(f"Data modified: {os.path.getmtime(dataFile)}")
+            # log("Data written")
             # log(f"2 lock/data: {datetime.fromtimestamp(os.path.getmtime(dataLockFile)).strftime('%H:%M:%S')}/{datetime.fromtimestamp(os.path.getmtime(dataFile)).strftime('%H:%M:%S')}")
+            if type(prices) is str:
+                if ContiguousRetry < 3:
+                    ContiguousRetry += 1
+                    log(f'Retry {ContiguousRetry}')
+                    continue
+
             if market_time:
                 time.sleep(random.randint(Config["delay"] - 2, Config["delay"]))
             else:
+                log("Market inactive, exit.")
                 break

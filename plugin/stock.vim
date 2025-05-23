@@ -29,6 +29,7 @@ let s:stk_delay = 0
 let s:stk_last_read_time = 0
 let s:stk_cfg_ts = 0
 let s:stk_timer = 0
+let s:stk_retry = 0
 let g:stk_output = ''
 
 function! s:Log(msg)
@@ -69,13 +70,13 @@ function! s:CheckRunner(silent)
       "echom 'pid: ' . l:pid
       if s:IsProcessRunning(l:pid)
         if !a:silent
-          call s:Log("Runner is already running")
+          call s:Log("Runner already running")
         endif
         return l:pid
       endif
     else
       if !a:silent
-        call s:Log("Runner is starting by another instance")
+        call s:Log("Runner being started by another Vim")
       endif
       return 1
     endif
@@ -90,9 +91,9 @@ function OpenDataFile()
     file_handle = io.open(vim.g.stk_data_path, 'r')
     if file_handle then
         file_handle:setvbuf("full", 4096)  -- Set buffer size for efficiency
-        vim.api.nvim_command('call s:Log("Data file opened")')
+        vim.api.nvim_command('call s:Log("Opened data file")')
     else
-        vim.api.nvim_command('call s:LogErr("Failed to open data file")')
+        vim.api.nvim_command('call s:LogErr("Failed opening data file")')
     end
 end
 
@@ -109,7 +110,7 @@ function ReadDataInner()
         -- print(data)
         return data
     else
-        vim.api.nvim_command('call s:LogErr("File handle is not available")')
+        vim.api.nvim_command('call s:LogErr("File handle not available")')
         return ""
     end
 end
@@ -155,7 +156,7 @@ endfunction
 
 function! s:ReadData()
   let l:content = luaeval('ReadDataInner()')
-  "echom 'data content: ' . l:content
+  "call s:Log('data content: ' . l:content)
   let s:stk_last_read_time = localtime()
   if len(l:content) > 0
     return json_decode(l:content)
@@ -180,7 +181,7 @@ function! s:ReadConfig()
 
     return 1
   else
-    call s:Log("File does not exist: " . s:stk_config_path)
+    call s:Log("Config file non-exist: " . s:stk_config_path)
     let l:data = {"codes": [], "indices": ["000001", "399001", "399006", "899050", "000985", "HSI"], "threshold": {"indices": [2, 3, 4, 5, 2, 3], "up": 7, "down": 5}, "delay": 6, "rest_dates": []}
     let l:json_content = json_encode(l:data)
     call writefile(split(l:json_content, "\n"), s:stk_config_path)
@@ -225,7 +226,7 @@ function! s:handle_stderr(data)
 endfunction
 
 function! s:StartRunner(check)
-  "echom 'StartRunner'
+  "call s:Log('StartRunner')
   let l:failed = 0
 
   try
@@ -238,10 +239,10 @@ function! s:StartRunner(check)
     let l:jobid = jobstart(["python", s:stk_runner_path], {'on_stderr': {job_id, data, event -> s:handle_stderr(data)}})
 
     if l:jobid == -1
-      call s:LogErr("runner not executable")
+      call s:LogErr("Runner not executable")
       let l:failed = 1
     elseif l:jobid == 0
-      call s:LogErr("runner with invalid arguments")
+      call s:LogErr("Runner with invalid arguments")
       let l:failed = 1
     endif
 
@@ -265,18 +266,18 @@ function! s:StartRunner(check)
 endfunction
 
 function! s:WaitDisplay(timer)
-  "echom 'WaitDisplay'
-  " echom getftime(g:stk_data_path) . ' ' . s:stk_last_read_time
+  "call s:Log('WaitDisplay: ' . getftime(g:stk_data_path) . ' ' . s:stk_last_read_time)
   if getftime(g:stk_data_path) > s:stk_last_read_time
     call s:DisplayPrices(0)
   else
-    call s:Log('Update is pending')
+    call s:Log('Update pending')
     let s:stk_timer = timer_start(1000, 's:WaitDisplay')
   endif
 endfunction
 
+" a:timer = 0: called directly once rather than intermittently at market time  
 function! s:DisplayPrices(timer)
-  "echom 'DisplayPrices'
+  "call s:Log('DisplayPrices')
   let l:tCfg = getftime(s:stk_config_path)
   if l:tCfg > s:stk_cfg_ts
     call s:ReadConfig()
@@ -286,25 +287,31 @@ function! s:DisplayPrices(timer)
   let l:tData = getftime(g:stk_data_path)
 
   if !filereadable(s:stk_data_lock_path)
-    let l:tLock = 12345678901 ":locked
+    let l:tLock = 12345678901 ":locked: one more digit
   else
     let l:tLock = getftime(s:stk_data_lock_path)
   endif
-  "echom 'Lock/Data: ' . string(l:tLock) . '/' . string(l:tData)
-  if l:tLock > l:tData
-    call s:Log('Data is locked (if loop, runner quit abruptly, go to verify then call <leader>su...)')
+  "call s:Log('Lock/Data: ' . string(l:tLock) . '/' . string(l:tData))
+  if a:timer && l:tLock > l:tData
+    call s:Log('Data locked (if loop, runner quit abruptly, go to verify then call <leader>su...)')
     let s:stk_timer = timer_start(1000, 's:DisplayPrices')
     return
   endif
+
+  "call s:Log('Data age: ' . string(localtime() - l:tData))
+  if a:timer && localtime() - l:tData > 60 " 1 min
+    call s:Log("Data obsolete (runner crashed or wake from sleep"))
+    call StockRun()
+    return
+  end 
 
   let l:updated = l:tData > s:stk_last_read_time
   let l:data = s:ReadData()
   "Only check runner if called in market time (by schedule) & data is not updated by runner
   let l:waiting = a:timer && !l:updated
-  "echom 'modified data/last: ' string(l:tData) . ' ' . string(s:stk_last_read_time)
-  "echom 'a:timer: ' . string(a:timer)
+  "call s:Log('modified data/last: ' . string(l:tData) . ' ' . string(s:stk_last_read_time) . ' a:timer: ' . string(a:timer))
   if l:waiting
-    "echom 'waiting: ' string(l:tData) . ' ' . string(s:stk_last_read_time)
+    "call s:Log('waiting: ' . string(l:tData) . ' ' . string(s:stk_last_read_time))
     if !s:CheckRunner(1)
       call s:StartRunner(0)
       return
@@ -375,10 +382,10 @@ function! s:DisplayPrices(timer)
         endfor
         let g:stk_output = l:text
       else
-        call s:Log('Prices are empty')
+        call s:Log('Prices empty')
       endif
     else
-      call s:Log('No prices yet')
+      call s:Log('Prices cleared (when just open in runner)')
     endif
   endif
 
@@ -387,22 +394,18 @@ function! s:DisplayPrices(timer)
   if s:InRestDay()
     let l:target_days = s:FindNextOpenDay()
   else
-    let l:timehour = strftime("%H%M")
-    if l:timehour < "0915"
+    let l:timehour = strftime("%H%M%S") "Consistent with stocker_runner `datetime.now().time()`
+    if l:timehour < "091500"
       let l:target_hour = 9
       let l:target_minute = 15
-    elseif l:timehour >= "1130" && l:timehour < "1300"
+    elseif l:timehour > "113000" && l:timehour < "130000"
       let l:target_hour = 13
       let l:target_minute = 0
-    elseif l:timehour >= "1600"
+    elseif l:timehour > "160000"
       call s:Log('Market closed')
       let l:target_days = s:FindNextOpenDay()
     endif
   endif
-  if (l:target_days || l:target_hour) && localtime() - s:stk_last_read_time > 2000
-    call StockRun() "Wake from sleep, start from scratch to ensure data is the latest
-    return
-  end 
 
   if l:target_days
     let l:min = (24 * l:target_days - str2nr(strftime("%H"))) * 60 - str2nr(strftime("%M"))
@@ -421,9 +424,17 @@ function! s:DisplayPrices(timer)
   else
     let s:stk_timer = timer_start(s:stk_delay, 's:DisplayPrices')
   endif
+
+  " Display a correct one before quit
+  if (l:target_days || l:target_hour) && (!has_key(l:data, 'prices') || type(l:data['prices']) == v:t_string) && s:stk_retry < 3
+    let s:stk_retry += 1
+    call s:Log('Retry ' . s:stk_retry)
+    let s:stk_timer = timer_start(s:stk_delay, 's:DisplayPrices')
+  endif
 endfunction
 
 function! StockRun()
+  "call s:Log('StockRun')
   if !s:ReadConfig()
     return
   endif
@@ -436,6 +447,7 @@ function! StockRun()
   else
     let l:data_modified_time = getftime(g:stk_data_path)
     let s:stk_last_read_time = localtime()
+    "call s:Log('StockRun s:stk_last_read_time: ' . string(s:stk_last_read_time))
 
     if getftime(s:stk_config_path) > l:data_modified_time
       let l:needRunner = 1
@@ -445,20 +457,20 @@ function! StockRun()
         "strptime is not available on windows
         "Simpler way to ensure it's the latest
         if l:data_modified_time < l:today_start
-          "echom 'data modified time: ' . l:data_modified_time . ' today start: ' . l:today_start
+          "call s:Log('data modified time: ' . l:data_modified_time . ' today start: ' . l:today_start)
           let l:needRunner = 1
         endif
       else
-        let l:timehour = strftime("%H%M")
-        if l:timehour < "0915"
+        let l:timehour = strftime("%H%M%S")
+        if l:timehour < "091500"
           if l:data_modified_time < l:today_start
             let l:needRunner = 1
           endif
-        elseif l:timehour >= "1130" && l:timehour < "1300"
+        elseif l:timehour >= "113000" && l:timehour < "130000"
           if l:data_modified_time < l:today_start + 11 * 3600 + 30 * 60
             let l:needRunner = 1
           endif
-        elseif l:timehour >= "1600"
+        elseif l:timehour >= "160000"
           if l:data_modified_time < l:today_start + 16 * 3600
             let l:needRunner = 1
           endif
@@ -478,7 +490,7 @@ function! StockRun()
 endfunction
 
 function! StockRefresh()
-  echom 'refreshing'
+  "call s:Log('refreshing')
   call writefile([""], g:stk_data_path, 'b') " prevent newline
   call StockRun()
 endfunction
@@ -491,7 +503,7 @@ function! StockUpdate()
 
   let l:pid = s:CheckRunner(1)
   if l:pid > 1
-    echom "Killing runner: " .. l:pid
+    call s:Log("Killing runner: " .. l:pid)
     lua vim.loop.kill(vim.fn['eval']('l:pid'), 9)
   endif
   call StockRefresh()
