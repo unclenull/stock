@@ -267,7 +267,7 @@ endfunction
 
 function! s:WaitDisplay(timer)
   "call s:Log('WaitDisplay: ' . getftime(g:stk_data_path) . ' ' . s:stk_last_read_time)
-  if getftime(g:stk_data_path) > s:stk_last_read_time
+  if filereadable(g:stk_data_path) && getftime(g:stk_data_path) > s:stk_last_read_time && getfsize(g:stk_data_path) > 0
     call s:DisplayPrices(0)
   else
     call s:Log('Update pending')
@@ -291,7 +291,7 @@ function! s:DisplayPrices(timer)
   else
     let l:tLock = getftime(s:stk_data_lock_path)
   endif
-  "call s:Log('Lock/Data: ' . string(l:tLock) . '/' . string(l:tData))
+  "call s:Log('Lock/Data: ' . l:tLock . '/' . l:tData . ' >' . (l:tLock > l:tData) . ' timer:' . a:timer)
   if a:timer && l:tLock > l:tData
     call s:Log('Data locked (if loop, runner quit abruptly, go to verify then call <leader>su...)')
     let s:stk_timer = timer_start(1000, 's:DisplayPrices')
@@ -300,7 +300,7 @@ function! s:DisplayPrices(timer)
 
   "call s:Log('Data age: ' . string(localtime() - l:tData))
   if a:timer && localtime() - l:tData > 60 " 1 min
-    call s:Log("Data obsolete (runner crashed or wake from sleep"))
+    call s:Log("Data obsolete (runner crashed or wake from sleep)")
     call StockRun()
     return
   end 
@@ -385,7 +385,7 @@ function! s:DisplayPrices(timer)
         call s:Log('Prices empty')
       endif
     else
-      call s:Log('Prices cleared (when just open in runner)')
+      call s:Log('No "Prices" key, data may be corrupted, or cleared when right open in runner, but here should not be reached, check dataLockFile logics')
     endif
   endif
 
@@ -425,10 +425,13 @@ function! s:DisplayPrices(timer)
     let s:stk_timer = timer_start(s:stk_delay, 's:DisplayPrices')
   endif
 
-  " Display a correct one before quit
+  "Display a correct one before quit
+  "echom 'aaaa' . (l:target_days || l:target_hour)
+  "echom 'bbbb' . (!has_key(l:data, 'prices') || type(l:data['prices']) == v:t_string)
+  "echom 'cccc' . (s:stk_retry < 3)
   if (l:target_days || l:target_hour) && (!has_key(l:data, 'prices') || type(l:data['prices']) == v:t_string) && s:stk_retry < 3
-    let s:stk_retry += 1
     call s:Log('Retry ' . s:stk_retry)
+    let s:stk_retry += 1
     let s:stk_timer = timer_start(s:stk_delay, 's:DisplayPrices')
   endif
 endfunction
