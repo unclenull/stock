@@ -26,7 +26,7 @@ let s:stk_runner_pid_path = s:stk_folder . '/stock.runner.pid'
 let s:stk_runner_path = expand('<sfile>:p:h') . "/stock_runner.py"
 let s:stk_config = {}
 let s:stk_delay = 0
-let s:stk_last_read_time = 0
+let g:stk_last_read_time = 0
 let s:stk_cfg_ts = 0
 let s:stk_timer = 0
 let s:stk_retry = 0
@@ -70,12 +70,14 @@ function! s:CheckRunner(silent)
       "echom 'pid: ' . l:pid
       if s:IsProcessRunning(l:pid)
         if !a:silent
-          call s:Log("Runner already running")
+          call s:Log("Runner already running " . l:pid)
         endif
         return l:pid
+      else
+        call s:Log("Stopped runner: " . l:pid)
       endif
     else
-      if !a:silent
+      if 1 || !a:silent
         call s:Log("Runner being started by another Vim")
       endif
       return 1
@@ -157,7 +159,7 @@ endfunction
 function! s:ReadData()
   let l:content = luaeval('ReadDataInner()')
   "call s:Log('data content: ' . l:content)
-  let s:stk_last_read_time = localtime()
+  let g:stk_last_read_time = localtime()
   if len(l:content) > 0
     return json_decode(l:content)
   else
@@ -250,8 +252,9 @@ function! s:StartRunner(check)
       throw ''
     else
       let l:timestamp = localtime()
-      call s:Log("Runner started at " . string(l:timestamp))
-      call writefile([string(jobpid(l:jobid))], s:stk_runner_pid_path)
+      let l:pid = string(jobpid(l:jobid))
+      call s:Log("Runner started at " . string(l:timestamp) . ': ' . l:pid)
+      call writefile([l:pid], s:stk_runner_pid_path)
     endif
   catch
     if v:exception != ''
@@ -267,7 +270,7 @@ endfunction
 
 function! s:WaitDisplay(timer)
   "call s:Log('WaitDisplay: ' . getftime(g:stk_data_path) . ' ' . s:stk_last_read_time)
-  if filereadable(g:stk_data_path) && getftime(g:stk_data_path) > s:stk_last_read_time && getfsize(g:stk_data_path) > 0
+  if filereadable(g:stk_data_path) && getftime(g:stk_data_path) > g:stk_last_read_time && getfsize(g:stk_data_path) > 0
     call s:DisplayPrices(0)
   else
     call s:Log('Update pending')
@@ -305,13 +308,13 @@ function! s:DisplayPrices(timer)
     return
   end 
 
-  let l:updated = l:tData > s:stk_last_read_time
+  let l:updated = l:tData > g:stk_last_read_time
   let l:data = s:ReadData()
   "Only check runner if called in market time (by schedule) & data is not updated by runner
   let l:waiting = a:timer && !l:updated
-  "call s:Log('modified data/last: ' . string(l:tData) . ' ' . string(s:stk_last_read_time) . ' a:timer: ' . string(a:timer))
+  "call s:Log('modified data/last: ' . string(l:tData) . ' ' . string(g:stk_last_read_time) . ' a:timer: ' . string(a:timer))
   if l:waiting
-    "call s:Log('waiting: ' . string(l:tData) . ' ' . string(s:stk_last_read_time))
+    call s:Log('waiting: ' . string(l:tData) . ' ' . string(g:stk_last_read_time))
     if !s:CheckRunner(1)
       call s:StartRunner(0)
       return
@@ -401,7 +404,7 @@ function! s:DisplayPrices(timer)
     elseif l:timehour > "113000" && l:timehour < "130000"
       let l:target_hour = 13
       let l:target_minute = 0
-    elseif l:timehour > "160000"
+    elseif l:timehour > "150000"
       call s:Log('Market closed')
       let l:target_days = s:FindNextOpenDay()
     endif
@@ -449,8 +452,8 @@ function! StockRun()
     let l:needRunner = 1
   else
     let l:data_modified_time = getftime(g:stk_data_path)
-    let s:stk_last_read_time = localtime()
-    "call s:Log('StockRun s:stk_last_read_time: ' . string(s:stk_last_read_time))
+    let g:stk_last_read_time = localtime()
+    "call s:Log('StockRun g:stk_last_read_time: ' . string(g:stk_last_read_time))
 
     if getftime(s:stk_config_path) > l:data_modified_time
       let l:needRunner = 1
@@ -473,8 +476,8 @@ function! StockRun()
           if l:data_modified_time < l:today_start + 11 * 3600 + 30 * 60
             let l:needRunner = 1
           endif
-        elseif l:timehour >= "160000"
-          if l:data_modified_time < l:today_start + 16 * 3600
+        elseif l:timehour >= "150000"
+          if l:data_modified_time < l:today_start + 15 * 3600
             let l:needRunner = 1
           endif
         else

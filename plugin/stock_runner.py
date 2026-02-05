@@ -306,14 +306,12 @@ sys.excepthook = global_exception_handler
 atexit.register(cleanup)
 
 if inRest():
-    if os.path.exists(dataFile):
-        tsData = os.path.getmtime(dataFile)
-    else:
-        tsData = 0
+    needRead = True
 
-    # if os.path.getmtime(configFile) > tsData or \
-    # log(datetime.fromtimestamp(tsData).strftime('%m-%d') + ' ' + datetime.now().strftime('%m-%d'))
-    if datetime.fromtimestamp(tsData).date() != datetime.now().date():
+    if os.path.exists(dataFile) and os.path.getsize(dataFile) > 0:
+        needRead = datetime.fromtimestamp(os.path.getmtime(dataFile)).date() != datetime.now().date()
+
+    if needRead:
         delDataLockFile()
         retry = 3
         while retry:
@@ -329,10 +327,11 @@ if inRest():
     log("Rest day, exit.")
     sys.exit(0)
 
+# 1 minute buffer in case consumers wake at this minute
 time_start1 = datetime.strptime("9:15", "%H:%M").time()
-time_end1 = datetime.strptime("11:30", "%H:%M").time()
+time_end1 = datetime.strptime("11:31", "%H:%M").time()
 time_start2 = datetime.strptime("13:00", "%H:%M").time()
-time_end2 = datetime.strptime("16:00", "%H:%M").time()
+time_end2 = datetime.strptime("15:01", "%H:%M").time()
 
 Data = {}
 if os.path.exists(dataFile):
